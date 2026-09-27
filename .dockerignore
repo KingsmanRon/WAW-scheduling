@@ -1,0 +1,13 @@
+# Never ship local state or secrets into the image.
+.git
+.env
+.env.*
+!.env.example
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+data
+coverage
+scratch
+qualification-report.json

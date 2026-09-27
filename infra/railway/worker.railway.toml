@@ -1,0 +1,11 @@
+# Railway is supported for synthetic-staging only. Required variables:
+# ACCESS_DEPLOYMENT_PROFILE=synthetic-staging, WORKER_DATABASE_URL (access_worker),
+# DATABASE_SSL=require, DATABASE_CA_CERT, CONNECTOR_KIND=mock, and the
+# DISPATCH_*/RECONCILE_* values. Never MIGRATION_DATABASE_URL.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+[deploy]
+startCommand = "node apps/worker/dist/main.js"
+restartPolicyType = "ON_FAILURE"
+numReplicas = 1

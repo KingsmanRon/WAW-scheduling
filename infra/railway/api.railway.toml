@@ -1,0 +1,12 @@
+# Railway is supported for synthetic-staging only (ACCESS_DATA_MODE=SYNTHETIC).
+# Required variables: ACCESS_DEPLOYMENT_PROFILE=synthetic-staging,
+# API_DATABASE_URL (access_request), DATABASE_SSL=require, DATABASE_CA_CERT,
+# ARTIFACT_ENCRYPTION_KEY, CONSOLE_ORIGIN, and either ACCESS_AUTH_MODE=jwt with
+# AUTH_JWT_* or ACCESS_AUTH_MODE=synthetic. Never MIGRATION_DATABASE_URL.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+[deploy]
+startCommand = "node apps/core-api/dist/server.js"
+healthcheckPath = "/ready"
+restartPolicyType = "ON_FAILURE"

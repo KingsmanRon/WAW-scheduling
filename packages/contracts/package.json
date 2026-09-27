@@ -1,0 +1,12 @@
+{
+  "name": "@access/contracts",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "zod": "^4.1.8"
+  }
+}

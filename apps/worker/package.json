@@ -1,0 +1,20 @@
+{
+  "name": "@access/worker",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -b",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@access/config": "*",
+    "@access/contracts": "*",
+    "@access/db": "*",
+    "@access/domain": "*",
+    "@access/observability": "*",
+    "@access/policy": "*",
+    "@access/rules": "*",
+    "pg": "^8.16.3"
+  }
+}

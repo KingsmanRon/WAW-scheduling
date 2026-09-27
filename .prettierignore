@@ -1,0 +1,9 @@
+package-lock.json
+dist
+.next
+coverage
+
+ARCHITECTURE_REVIEW.md
+IMPLEMENTATION_HANDOFF.md
+PRODUCT_ASSESSMENT.md
+NEXT_CHAT_PROMPT.md

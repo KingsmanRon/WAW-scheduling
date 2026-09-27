@@ -1,0 +1,87 @@
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.4
+        env:
+          {
+            POSTGRES_DB: access_test,
+            POSTGRES_USER: postgres,
+            POSTGRES_PASSWORD: postgres,
+          }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: "postgres://postgres:postgres@localhost:5432/access_test"
+      # PostgreSQL suites fail (never skip) if the database is missing.
+      REQUIRE_DATABASE_TESTS: "true"
+      PG_VERSION: "16.4"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: Format
+        run: npm run format
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck (runtime and tests)
+        run: npm run typecheck
+      - name: Unit tests (lifecycle, booking sub-flow, rules, policy, config, storage, scanner, logging, migrations, connector and destination faults)
+        run: npx vitest run --project unit --reporter=verbose --reporter=json --outputFile.json=unit-report.json
+      - name: Assert unit suite ran without skips
+        run: node scripts/assert-test-report.mjs unit-report.json 106
+      - name: PostgreSQL integration (migrations, RLS, dispatcher, ambiguity, poison, idempotency, outcomes, metrics, rules, artifacts, auth/tenancy, acceptance 1-29, E2E flows A-I, appointment scenarios A-S, appointment security)
+        env:
+          QUALIFICATION_REPORT: qualification-report.json
+          APPOINTMENT_QUALIFICATION_REPORT: appointment-qualification-report.json
+        run: npx vitest run --project integration --reporter=verbose --reporter=json --outputFile.json=integration-report.json
+      - name: Assert integration suites ran without skips
+        run: node scripts/assert-test-report.mjs integration-report.json 116
+      - name: Build
+        run: npm run build
+      - name: Install Bicep
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL -o "$HOME/.local/bin/bicep" https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
+          chmod +x "$HOME/.local/bin/bicep"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/bicep" --version
+      - name: Infrastructure validation
+        run: npm run validate:infra
+      - name: Secret scanning
+        run: npm run check:secrets
+      - name: Upload test and qualification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: access-test-reports
+          path: |
+            unit-report.json
+            integration-report.json
+            qualification-report.json
+            appointment-qualification-report.json
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build runtime image
+        run: docker build -t access:ci .
+      - name: Image refuses insecure client-pilot configuration
+        run: |
+          set +e
+          docker run --rm -e ACCESS_DEPLOYMENT_PROFILE=client-pilot -e ACCESS_DATA_MODE=REAL access:ci node apps/core-api/dist/server.js
+          api=$?
+          docker run --rm -e ACCESS_DEPLOYMENT_PROFILE=client-pilot -e ACCESS_DATA_MODE=REAL -e CONNECTOR_KIND=mock access:ci node apps/worker/dist/main.js
+          worker=$?
+          set -e
+          echo "api exit $api, worker exit $worker"
+          test "$api" = 78 && test "$worker" = 78
+      - name: Image contains no development dependencies or local state
+        run: |
+          docker run --rm access:ci sh -c 'test ! -d node_modules/vitest && test ! -d node_modules/typescript && test ! -e .env && test ! -d data && test ! -d tests'

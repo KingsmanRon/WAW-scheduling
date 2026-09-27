@@ -1,0 +1,40 @@
+{
+  "name": "access",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "lint": "eslint .",
+    "typecheck": "tsc -b && tsc -p tsconfig.tests.json",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:fault": "vitest run tests/fault",
+    "qualify:synthetic": "vitest run --project integration tests/e2e/qualification.test.ts",
+    "qualify:appointments": "vitest run --project integration tests/e2e/appointments.test.ts",
+    "build": "npm run build --workspaces --if-present",
+    "dev": "concurrently \"npm -w @access/core-api run dev\" \"npm -w @access/worker run dev\" \"npm -w @access/console run dev\"",
+    "db:migrate": "tsx packages/db/src/migrate.ts",
+    "db:seed": "tsx packages/db/src/seed.ts",
+    "load": "tsx tests/load/profile.ts",
+    "validate:infra": "bash infra/validate.sh",
+    "check:secrets": "bash scripts/check-secrets.sh",
+    "tenant:bootstrap": "tsx packages/db/src/bootstrap-tenant.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/node": "^20.19.17",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.36.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.44.0",
+    "vitest": "^3.2.4"
+  }
+}

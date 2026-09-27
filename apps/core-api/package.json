@@ -1,0 +1,23 @@
+{
+  "name": "@access/core-api",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -b",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@access/config": "*",
+    "@access/contracts": "*",
+    "@access/db": "*",
+    "@access/domain": "*",
+    "@access/observability": "*",
+    "@access/policy": "*",
+    "@access/rules": "*",
+    "@fastify/cors": "^11.1.0",
+    "fastify": "^5.6.0",
+    "jose": "^6.2.12",
+    "zod": "^4.1.8"
+  }
+}
