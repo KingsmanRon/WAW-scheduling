@@ -41,6 +41,28 @@ export const LOG_FIELD_ALLOWLIST = new Set([
   "build",
   "port",
   "worked",
+  // Scheduling platform.
+  "service",
+  "environment",
+  "practice_id",
+  "request_id",
+  "actor_type",
+  "actor_id",
+  "appointment_id",
+  "hold_id",
+  "event_id",
+  "event_type",
+  "delivery_id",
+  "message_id",
+  "connection_id",
+  "provider",
+  "channel",
+  "notification_type",
+  "latency_ms",
+  "lag_ms",
+  "backoff_ms",
+  "http_status",
+  "limit",
 ]);
 /** Never logged, at any depth, even if someone adds them to the allowlist. */
 export const SENSITIVE_FIELDS = new Set([
@@ -95,6 +117,20 @@ export function sanitizeFields(
   return out;
 }
 
+/** Fields stamped on every line of this process (service, environment, build). */
+let processFields: Record<string, unknown> = {};
+export function configureLogging(fields: {
+  service: string;
+  environment: string;
+  build?: string;
+}): void {
+  processFields = {
+    service: fields.service,
+    environment: fields.environment,
+    ...(fields.build ? { build: fields.build } : {}),
+  };
+}
+
 export type LogSink = (line: string) => void;
 let sink: LogSink = (line) => process.stdout.write(line + "\n");
 /** Tests capture output through this hook. */
@@ -113,6 +149,7 @@ export function log(
       timestamp: new Date().toISOString(),
       level,
       message,
+      ...processFields,
       ...sanitizeFields(fields),
     }),
   );
@@ -127,12 +164,117 @@ export function errorFields(error: unknown): Record<string, unknown> {
   };
 }
 
+type Labels = Record<string, string>;
+const DEFAULT_BUCKETS = [
+  0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10,
+];
+function labelKey(labels: Labels | undefined): string {
+  if (!labels) return "";
+  const entries = Object.entries(labels).sort(([a], [b]) => a.localeCompare(b));
+  return entries
+    .map(
+      ([k, v]) =>
+        `${k}="${String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ")}"`,
+    )
+    .join(",");
+}
+const METRIC_NAME = /^[a-z_][a-z0-9_]*$/;
+interface Histogram {
+  buckets: number[];
+  counts: number[];
+  sum: number;
+  count: number;
+}
+/**
+ * Process metrics in the Prometheus text exposition format. Label values
+ * are small closed vocabularies (route patterns, status codes, error codes,
+ * event types) - never identifiers of patients, appointments or tenants.
+ */
 export class Metrics {
-  private values = new Map<string, number>();
-  inc(name: string): void {
-    this.values.set(name, (this.values.get(name) ?? 0) + 1);
+  private counters = new Map<string, Map<string, number>>();
+  private gauges = new Map<string, Map<string, number>>();
+  private histograms = new Map<string, Map<string, Histogram>>();
+  private help = new Map<string, string>();
+  constructor(private readonly prefix = "access_") {}
+  describe(name: string, text: string): this {
+    this.help.set(this.prefix + name, text);
+    return this;
   }
+  inc(name: string, labels?: Labels, value = 1): void {
+    const series = this.series(this.counters, name);
+    const key = labelKey(labels);
+    series.set(key, (series.get(key) ?? 0) + value);
+  }
+  set(name: string, value: number, labels?: Labels): void {
+    this.series(this.gauges, name).set(labelKey(labels), value);
+  }
+  /** Record a duration or size; seconds for durations. */
+  observe(name: string, value: number, labels?: Labels): void {
+    const series = this.series(this.histograms, name);
+    const key = labelKey(labels);
+    let h = series.get(key);
+    if (!h) {
+      h = {
+        buckets: DEFAULT_BUCKETS,
+        counts: DEFAULT_BUCKETS.map(() => 0),
+        sum: 0,
+        count: 0,
+      };
+      series.set(key, h);
+    }
+    h.sum += value;
+    h.count += 1;
+    h.buckets.forEach((b, i) => {
+      if (value <= b) h!.counts[i]! += 1;
+    });
+  }
+  private series<T>(store: Map<string, Map<string, T>>, name: string) {
+    const full = this.prefix + name;
+    if (!METRIC_NAME.test(full)) throw new Error(`invalid metric name ${name}`);
+    let series = store.get(full);
+    if (!series) {
+      series = new Map();
+      store.set(full, series);
+    }
+    return series;
+  }
+  /** Flat counter totals (legacy JSON view and tests). */
   snapshot(): Record<string, number> {
-    return Object.fromEntries(this.values);
+    const out: Record<string, number> = {};
+    for (const [name, series] of this.counters)
+      for (const [labels, value] of series)
+        out[labels ? `${name}{${labels}}` : name] = value;
+    return out;
+  }
+  renderPrometheus(): string {
+    const lines: string[] = [];
+    const header = (name: string, type: string) => {
+      const help = this.help.get(name);
+      if (help) lines.push(`# HELP ${name} ${help}`);
+      lines.push(`# TYPE ${name} ${type}`);
+    };
+    const series = (name: string, labels: string, value: number) =>
+      lines.push(`${name}${labels ? `{${labels}}` : ""} ${value}`);
+    for (const [name, s] of this.counters) {
+      header(name, "counter");
+      for (const [labels, value] of s) series(name, labels, value);
+    }
+    for (const [name, s] of this.gauges) {
+      header(name, "gauge");
+      for (const [labels, value] of s) series(name, labels, value);
+    }
+    for (const [name, s] of this.histograms) {
+      header(name, "histogram");
+      for (const [labels, h] of s) {
+        const join = (extra: string) => (labels ? `${labels},${extra}` : extra);
+        h.buckets.forEach((b, i) =>
+          series(`${name}_bucket`, join(`le="${b}"`), h.counts[i]!),
+        );
+        series(`${name}_bucket`, join('le="+Inf"'), h.count);
+        series(`${name}_sum`, labels, h.sum);
+        series(`${name}_count`, labels, h.count);
+      }
+    }
+    return lines.join("\n") + "\n";
   }
 }

@@ -471,7 +471,10 @@ BEGIN
   END LOOP;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
     GRANT USAGE ON SCHEMA platform, directory, scheduling TO authenticated;
-    GRANT EXECUTE ON FUNCTION platform.jwt_sub(), platform.uuid_or_null(text) TO authenticated;
+    -- Policies on the membership table reference the request-context
+    -- helpers; they only read the caller's own (unset) session settings.
+    GRANT EXECUTE ON FUNCTION platform.jwt_sub(), platform.uuid_or_null(text), platform.current_tenant(),
+      platform.current_practice(), platform.current_user_uuid(), platform.current_actor_role() TO authenticated;
     GRANT SELECT ON directory.practice_memberships TO authenticated;
     GRANT SELECT ON scheduling.schedule_signals TO authenticated;
     CREATE POLICY jwt_self_read ON directory.practice_memberships FOR SELECT TO authenticated

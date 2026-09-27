@@ -3,6 +3,7 @@ import {
   OPERATIONS,
   type CaseActionName,
   type CaseType,
+  type PracticeRole,
   type StaffRole,
 } from "@access/contracts";
 
@@ -230,4 +231,131 @@ export function evaluateAction(input: {
     policyVersion: "action-policy.v2",
     reason: "administrative referral creation permitted",
   };
+}
+
+// ---------------------------------------------------------------------------
+// Practice (scheduling) authorisation. Roles come from verified practice
+// membership, server-side, on every request. Booking never implies clinical
+// access: receptionists manage schedules and demographics, but referral
+// documents (clinical content) are for clinicians and administrators.
+// ---------------------------------------------------------------------------
+
+export const PRACTICE_PERMISSIONS = [
+  "schedule.read",
+  "patient.read",
+  "patient.write",
+  "patient.duplicates.review",
+  "appointment.book",
+  "appointment.reschedule",
+  "appointment.cancel",
+  "appointment.check_in",
+  "appointment.progress",
+  "appointment.no_show",
+  "appointment.notes",
+  "appointment.override_availability",
+  "schedule.blocks.manage",
+  "schedule.exceptions.manage",
+  "schedule.hours.manage",
+  "configuration.manage",
+  "staff.manage",
+  "audit.read",
+  "waitlist.read",
+  "waitlist.manage",
+  "referral.read",
+  "referral.register",
+  "referral.verify",
+  "referral.document.read",
+  "conversation.manage",
+  "notification.read",
+  "notification.preferences.manage",
+  "integration.manage",
+] as const;
+export type PracticePermission = (typeof PRACTICE_PERMISSIONS)[number];
+
+const readOnly: readonly PracticePermission[] = ["schedule.read"];
+const clinicalStaff: readonly PracticePermission[] = [
+  "schedule.read",
+  "patient.read",
+  "appointment.check_in",
+  "appointment.progress",
+  "appointment.no_show",
+  "appointment.notes",
+  "waitlist.read",
+  "referral.read",
+  "referral.register",
+  "referral.verify",
+  "referral.document.read",
+  "notification.read",
+];
+const receptionist: readonly PracticePermission[] = [
+  "schedule.read",
+  "patient.read",
+  "patient.write",
+  "patient.duplicates.review",
+  "appointment.book",
+  "appointment.reschedule",
+  "appointment.cancel",
+  "appointment.check_in",
+  "appointment.progress",
+  "appointment.no_show",
+  "appointment.notes",
+  "appointment.override_availability",
+  "schedule.blocks.manage",
+  "schedule.exceptions.manage",
+  "waitlist.read",
+  "waitlist.manage",
+  "referral.read",
+  "referral.register",
+  "conversation.manage",
+  "notification.read",
+  "notification.preferences.manage",
+];
+const doctor: readonly PracticePermission[] = [
+  ...new Set<PracticePermission>([
+    ...clinicalStaff,
+    "appointment.book",
+    "appointment.reschedule",
+    "appointment.cancel",
+    "appointment.override_availability",
+    "schedule.blocks.manage",
+    "schedule.exceptions.manage",
+    "waitlist.manage",
+  ]),
+];
+const practiceMatrix: Record<PracticeRole, readonly PracticePermission[]> = {
+  READ_ONLY: readOnly,
+  CLINICAL_STAFF: clinicalStaff,
+  RECEPTIONIST: receptionist,
+  DOCTOR: doctor,
+  PRACTICE_ADMIN: PRACTICE_PERMISSIONS,
+};
+export function practiceCan(
+  role: PracticeRole,
+  permission: PracticePermission,
+): boolean {
+  return practiceMatrix[role].includes(permission);
+}
+export function practicePermissions(
+  role: PracticeRole,
+): readonly PracticePermission[] {
+  return practiceMatrix[role];
+}
+export function authorizePractice(
+  role: PracticeRole,
+  permission: PracticePermission,
+): void {
+  if (!practiceCan(role, permission))
+    throw new ForbiddenError(`role ${role} lacks ${permission}`);
+}
+/**
+ * Doctors manage only their own time (the practitioner their login is linked
+ * to); administrators and receptionists manage everyone's.
+ */
+export function assertOwnSchedule(
+  role: PracticeRole,
+  linkedPractitionerId: string | null,
+  practitionerId: string,
+): void {
+  if (role === "DOCTOR" && linkedPractitionerId !== practitionerId)
+    throw new ForbiddenError("doctors manage only their own schedule");
 }

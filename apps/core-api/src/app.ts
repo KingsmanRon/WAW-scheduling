@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { Pool } from "pg";
 import { ZodError, z } from "zod";
 import {
@@ -34,9 +34,15 @@ import {
   verifyEvidenceChain,
 } from "@access/db";
 import { errorFields, log, Metrics } from "@access/observability";
+import type { IdentifierHasher } from "@access/patients";
 import { assertDirectlyCreatable, authorize } from "@access/policy";
 import { RuleValidationError } from "@access/rules";
+import {
+  SchedulingError,
+  schedulingErrorFromDatabase,
+} from "@access/scheduling";
 import type { AuthContext, Authenticator } from "./auth.js";
+import { registerPracticeRoutes } from "./practice-routes.js";
 import { appointmentDetail, caseDetail, queue } from "./queries.js";
 import { CaseService } from "./service.js";
 
@@ -44,8 +50,12 @@ export interface AppDeps {
   pool: Pool;
   service: CaseService;
   authenticator: Authenticator;
+  hasher: IdentifierHasher;
   corsOrigins: string[];
   info: { profile: string; dataMode: string; buildId: string };
+  /** When set, GET /metrics requires `Authorization: Bearer <token>`. */
+  metricsToken?: string | undefined;
+  metrics?: Metrics;
 }
 declare module "fastify" {
   interface FastifyRequest {
@@ -54,40 +64,78 @@ declare module "fastify" {
   }
 }
 
+const REQUEST_ID = /^[A-Za-z0-9._-]{8,100}$/;
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
-  const metrics = new Metrics();
+  const metrics = deps.metrics ?? new Metrics();
+  metrics
+    .describe("http_requests_total", "HTTP requests by route and status")
+    .describe("http_server_errors_total", "HTTP 5xx responses by route")
+    .describe("http_request_duration_seconds", "HTTP request latency")
+    .describe(
+      "scheduling_commands_total",
+      "Scheduling mutations by operation and outcome (booking success, refusals)",
+    )
+    .describe("scheduling_command_seconds", "Scheduling mutation latency")
+    .describe("slot_conflicts_total", "SLOT_UNAVAILABLE refusals")
+    .describe("database_errors_total", "Unexpected database errors");
   const app = Fastify({
     logger: false,
     bodyLimit: 14_000_000,
     trustProxy: true,
+    genReqId: (req) => {
+      const given = req.headers["x-request-id"];
+      const value = Array.isArray(given) ? given[0] : given;
+      return value && REQUEST_ID.test(value) ? value : randomUUID();
+    },
   });
   await app.register(cors, {
     origin: deps.corsOrigins,
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "PATCH", "PUT"],
     allowedHeaders: [
       "authorization",
       "content-type",
+      "idempotency-key",
       "x-access-tenant",
       "x-correlation-id",
+      "x-request-id",
       "x-tenant-id",
       "x-access-role",
       "x-access-user",
+      "x-practice-role",
     ],
+    exposedHeaders: ["idempotent-replayed", "x-request-id"],
   });
-  app.addHook("onRequest", async (req) => {
+  app.addHook("onRequest", async (req, reply) => {
     req.startedAt = Date.now();
+    reply.header("x-request-id", String(req.id));
   });
-  app.addHook("onResponse", async (req, reply) =>
+  app.addHook("onResponse", async (req, reply) => {
+    const route = req.routeOptions.url ?? "unmatched";
+    const duration = Date.now() - (req.startedAt ?? Date.now());
+    metrics.inc("http_requests_total", {
+      method: req.method,
+      route,
+      status_code: String(reply.statusCode),
+    });
+    metrics.observe("http_request_duration_seconds", duration / 1000, {
+      method: req.method,
+      route,
+    });
+    if (reply.statusCode >= 500)
+      metrics.inc("http_server_errors_total", { route });
     log("info", "http_request", {
       method: req.method,
       // Route pattern, never the raw URL.
-      route: req.routeOptions.url ?? "unmatched",
+      route,
       status_code: reply.statusCode,
+      request_id: String(req.id),
       correlation_id: req.headers["x-correlation-id"],
-      tenant_id: req.auth?.tenantId,
-      duration_ms: Date.now() - (req.startedAt ?? Date.now()),
-    }),
-  );
+      tenant_id: req.auth?.tenantId ?? req.practiceAuth?.tenantId,
+      practice_id: req.practiceAuth?.practiceId,
+      actor_id: req.auth?.actor.id ?? req.practiceAuth?.actor.id,
+      duration_ms: duration,
+    });
+  });
   const auth = async (req: FastifyRequest): Promise<AuthContext> => {
     req.auth = await deps.authenticator.authenticate(req.headers);
     return req.auth;
@@ -107,18 +155,55 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return { status: "not_ready" };
     }
   });
-  app.get("/metrics", async () => metrics.snapshot());
+  app.get("/metrics", async (req, reply) => {
+    if (deps.metricsToken) {
+      const given = req.headers.authorization ?? "";
+      const expected = `Bearer ${deps.metricsToken}`;
+      if (
+        given.length !== expected.length ||
+        !timingSafeEqual(Buffer.from(given), Buffer.from(expected))
+      )
+        return reply.code(401).send({ error: "UNAUTHENTICATED" });
+    }
+    return reply
+      .type("text/plain; version=0.0.4; charset=utf-8")
+      .send(metrics.renderPrometheus());
+  });
 
+  /**
+   * Who the caller is: their organisation membership (referral operations)
+   * and practice memberships (scheduling). Either may be absent, not both.
+   */
   app.get("/v1/me", async (req) => {
-    const a = await auth(req);
+    let org: AuthContext | null = null;
+    try {
+      org = await auth(req);
+    } catch (e) {
+      if ((e as { code?: string }).code !== "NO_MEMBERSHIP") throw e;
+    }
+    const practices = await deps.authenticator.listPractices(req.headers);
+    if (!org && !practices.length)
+      throw new AppError(
+        403,
+        "NO_MEMBERSHIP",
+        "no active organisation or practice membership",
+      );
     return {
-      user_id: a.userId,
-      tenant_id: a.tenantId,
-      role: a.role,
-      auth_mode: a.mode,
+      user_id: org?.userId ?? null,
+      tenant_id: org?.tenantId ?? null,
+      role: org?.role ?? null,
+      auth_mode: deps.authenticator.mode,
       profile: deps.info.profile,
       data_mode: deps.info.dataMode,
+      practices,
     };
+  });
+
+  await registerPracticeRoutes(app, {
+    pool: deps.pool,
+    authenticator: deps.authenticator,
+    hasher: deps.hasher,
+    metrics,
   });
 
   // Referral intake (REFERRAL case type).
@@ -518,6 +603,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   app.setErrorHandler((e, req, r) => {
+    // Domain refusals carry stable codes and safe, structured details.
+    const domain =
+      e instanceof SchedulingError ? e : schedulingErrorFromDatabase(e);
+    if (domain) {
+      log("warn", "request_rejected", {
+        route: req.routeOptions.url,
+        code: domain.code,
+        status_code: domain.statusCode,
+      });
+      if (domain.code === "SLOT_UNAVAILABLE")
+        metrics.inc("slot_conflicts_total", { operation: "read" });
+      return r.code(domain.statusCode).send({
+        error: domain.code,
+        message: domain.message,
+        ...(domain.details ? { details: domain.details } : {}),
+      });
+    }
     if (e instanceof ZodError) {
       log("warn", "request_rejected", {
         route: req.routeOptions.url,
@@ -552,8 +654,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       });
     log("error", "request_failed", {
       route: req.routeOptions.url,
+      request_id: String(req.id),
       ...errorFields(e),
     });
+    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code))
+      metrics.inc("database_errors_total", { code });
     return r.code(status && status >= 500 ? status : 500).send({
       error: status === 503 ? (code ?? "UNAVAILABLE") : "INTERNAL",
       message: status === 503 ? (e as Error).message : "internal error",

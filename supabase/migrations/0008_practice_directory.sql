@@ -303,9 +303,10 @@ DO $$ DECLARE t text; BEGIN
   END LOOP;
 END $$;
 
--- Practices: readable by tenant context, or by a signed-in member resolving
--- which practices they belong to (no tenant context yet). The API sees only
--- the practice it acts for once a practice is selected.
+-- Practices: readable by tenant context (an organisation's own practice
+-- list), or by a signed-in member resolving which practices they belong to
+-- (no tenant context yet). Once the API acts for a practice it sees only
+-- that practice, and it can change only that practice.
 CREATE POLICY tenant_isolation ON directory.practices
   USING (tenant_id = platform.current_tenant()) WITH CHECK (tenant_id = platform.current_tenant());
 CREATE POLICY member_read ON directory.practices FOR SELECT
@@ -313,7 +314,7 @@ CREATE POLICY member_read ON directory.practices FOR SELECT
                   WHERE m.tenant_id = practices.tenant_id AND m.practice_id = practices.id
                     AND m.user_id = platform.current_user_uuid() AND m.status = 'ACTIVE'));
 CREATE POLICY practice_scope ON directory.practices AS RESTRICTIVE TO access_request
-  USING (id = platform.current_practice() OR (platform.current_practice() IS NULL AND platform.current_tenant() IS NULL))
+  USING (platform.current_practice() IS NULL OR id = platform.current_practice())
   WITH CHECK (id = platform.current_practice());
 
 -- Memberships: a user reads their own rows (login resolution, no tenant

@@ -7,6 +7,7 @@ import {
 } from "../../packages/config/src/index.js";
 
 const key = randomBytes(32).toString("hex");
+const hashKey = randomBytes(32).toString("hex");
 const pilotApi = {
   NODE_ENV: "production",
   ACCESS_DEPLOYMENT_PROFILE: "client-pilot",
@@ -26,6 +27,8 @@ const pilotApi = {
   SUPABASE_SERVICE_ROLE_KEY: "<service-role-placeholder>",
   ARTIFACT_SCANNER: "clamav",
   CLAMAV_HOST: "127.0.0.1",
+  IDENTIFIER_HASH_KEY: hashKey,
+  METRICS_TOKEN: "m".repeat(12) + randomBytes(16).toString("hex"),
 };
 function problems(fn: () => unknown): string[] {
   try {
@@ -164,9 +167,38 @@ describe("API startup configuration", () => {
       NODE_ENV: "development",
       DATABASE_URL: "postgres://dev:dev@localhost/access",
       ARTIFACT_ENCRYPTION_KEY: "0".repeat(64),
+      IDENTIFIER_HASH_KEY: "1".repeat(64),
     });
     expect(config.auth.mode).toBe("synthetic");
     expect(config.profile).toBe("local");
+    expect(config.metricsToken).toBeUndefined();
+  });
+  it("requires a real identifier hash key and a metrics token in secure profiles", () => {
+    expect(
+      problems(() =>
+        loadApiConfig({ ...pilotApi, IDENTIFIER_HASH_KEY: undefined }),
+      ).join(),
+    ).toMatch(/IDENTIFIER_HASH_KEY must be 64/);
+    expect(
+      problems(() =>
+        loadApiConfig({ ...pilotApi, IDENTIFIER_HASH_KEY: "0".repeat(64) }),
+      ).join(),
+    ).toMatch(/placeholder/);
+    expect(
+      problems(() =>
+        loadApiConfig({ ...pilotApi, IDENTIFIER_HASH_KEY: key }),
+      ).join(),
+    ).toMatch(/must differ/);
+    expect(
+      problems(() =>
+        loadApiConfig({ ...pilotApi, METRICS_TOKEN: undefined }),
+      ).join(),
+    ).toMatch(/requires METRICS_TOKEN/);
+    expect(
+      problems(() =>
+        loadApiConfig({ ...pilotApi, METRICS_TOKEN: "short" }),
+      ).join(),
+    ).toMatch(/at least 32/);
   });
 });
 

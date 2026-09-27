@@ -129,6 +129,42 @@ function encryptionKey(env: Env, c: Common, problems: string[]): Buffer {
   return key;
 }
 
+/**
+ * Key for the HMAC digests of national ID and passport numbers
+ * (directory.patient_identifiers). Rotating it requires re-hashing, so the
+ * key id is stored with every digest.
+ */
+function identifierHashKey(
+  env: Env,
+  c: Common,
+  problems: string[],
+): { key: Buffer; keyId: string } {
+  const hex = env.IDENTIFIER_HASH_KEY ?? "";
+  const keyId = env.IDENTIFIER_HASH_KEY_ID ?? "k1";
+  if (!/^[A-Za-z0-9_.-]{1,40}$/.test(keyId))
+    problems.push(
+      "IDENTIFIER_HASH_KEY_ID must be 1-40 characters of A-Z a-z 0-9 _ . -",
+    );
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    problems.push("IDENTIFIER_HASH_KEY must be 64 hexadecimal characters");
+    return { key: Buffer.alloc(32), keyId };
+  }
+  const key = Buffer.from(hex, "hex");
+  if (c.profile !== "local" && new Set(key).size < 8)
+    problems.push(
+      "IDENTIFIER_HASH_KEY looks like a placeholder, not a random key",
+    );
+  if (
+    env.ARTIFACT_ENCRYPTION_KEY &&
+    env.ARTIFACT_ENCRYPTION_KEY.toLowerCase() === hex.toLowerCase() &&
+    c.profile !== "local"
+  )
+    problems.push(
+      "IDENTIFIER_HASH_KEY must differ from ARTIFACT_ENCRYPTION_KEY",
+    );
+  return { key, keyId };
+}
+
 export interface AuthConfig {
   mode: "jwt" | "synthetic";
   issuer?: string;
@@ -206,6 +242,9 @@ export interface ApiConfig extends Common {
   scanner: ScannerConfig;
   extraction: { fixturesAllowed: boolean };
   buildId: string;
+  identifierHash: { key: Buffer; keyId: string };
+  /** Bearer token protecting GET /metrics (required in secure profiles). */
+  metricsToken: string | undefined;
 }
 
 function positiveInt(
@@ -322,7 +361,13 @@ export function loadApiConfig(env: Env = process.env): ApiConfig {
     scanner,
     extraction: { fixturesAllowed: c.dataMode === "SYNTHETIC" && !c.secure },
     buildId: env.BUILD_ID ?? "dev",
+    identifierHash: identifierHashKey(env, c, problems),
+    metricsToken: env.METRICS_TOKEN || undefined,
   };
+  if (config.metricsToken !== undefined && config.metricsToken.length < 32)
+    problems.push("METRICS_TOKEN must be at least 32 characters");
+  if (c.secure && !config.metricsToken)
+    problems.push(`${c.profile} requires METRICS_TOKEN to protect /metrics`);
   if (problems.length) throw new ConfigError(problems);
   return config;
 }

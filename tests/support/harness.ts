@@ -29,6 +29,7 @@ import {
   LocalEncryptedArtifactStore,
   type ArtifactStore,
 } from "../../apps/core-api/src/storage.js";
+import { IdentifierHasher } from "@access/patients";
 import {
   CapabilityGate,
   MockConnector,
@@ -139,11 +140,12 @@ export async function testApi(
           },
           apiPool(),
         )
-      : new SyntheticAuthenticator();
+      : new SyntheticAuthenticator(apiPool());
   const app = await buildApp({
     pool: apiPool(),
     service,
     authenticator,
+    hasher: new IdentifierHasher(Buffer.alloc(32, 7), "test-key-1"),
     corsOrigins: ["http://localhost:3000"],
     info: { profile: "local", dataMode: "SYNTHETIC", buildId: "test" },
   });

@@ -193,6 +193,18 @@ function redactExtraction(extraction: unknown, role: StaffRole): unknown {
   };
 }
 
+/** A pg client runs one query at a time, so issue them in order. */
+type Resolved<T extends readonly unknown[]> = {
+  -readonly [K in keyof T]: T[K] extends () => Promise<infer R> ? R : never;
+};
+async function inSequence<T extends readonly (() => Promise<unknown>)[] | []>(
+  steps: T,
+): Promise<Resolved<T>> {
+  const results: unknown[] = [];
+  for (const step of steps) results.push(await step());
+  return results as unknown as Resolved<T>;
+}
+
 export async function caseDetail(
   c: DbClient,
   tenantId: string,
@@ -224,44 +236,51 @@ export async function caseDetail(
     executions,
     transitions,
     effort,
-  ] = await Promise.all([
-    c.query(
-      `SELECT id,channel,direction,actor_type,actor_id,intent,received_at,content_reference,identity_verification_level,correlation_id
+  ] = await inSequence([
+    () =>
+      c.query(
+        `SELECT id,channel,direction,actor_type,actor_id,intent,received_at,content_reference,identity_verification_level,correlation_id
          FROM access_interactions WHERE tenant_id=$1 AND case_id=$2 ORDER BY received_at,id`,
-      [tenantId, caseId],
-    ),
-    c.query(
-      `SELECT id,observation_type,occurred_at,recorded_at,source_type,source_reference,verification_level,actor_id,disposition,disposition_reason,applied_at
+        [tenantId, caseId],
+      ),
+    () =>
+      c.query(
+        `SELECT id,observation_type,occurred_at,recorded_at,source_type,source_reference,verification_level,actor_id,disposition,disposition_reason,applied_at
          FROM access_case_observations WHERE tenant_id=$1 AND case_id=$2 ORDER BY occurred_at,recorded_at`,
-      [tenantId, caseId],
-    ),
-    c.query(
-      `SELECT sequence,event_type,aggregate_version,subject_type,subject_id,actor_type,actor_id,hash,previous_hash,hash_version,correlation_id,created_at${showPayloads ? ",payload" : ""}
+        [tenantId, caseId],
+      ),
+    () =>
+      c.query(
+        `SELECT sequence,event_type,aggregate_version,subject_type,subject_id,actor_type,actor_id,hash,previous_hash,hash_version,correlation_id,created_at${showPayloads ? ",payload" : ""}
          FROM evidence_events WHERE tenant_id=$1 AND case_id=$2 ORDER BY sequence`,
-      [tenantId, caseId],
-    ),
-    c.query(
-      `SELECT id,kind,status,reason,owner_role,due_at,created_at,resolved_at,resolved_by${showPayloads ? ",resolution" : ""}
+        [tenantId, caseId],
+      ),
+    () =>
+      c.query(
+        `SELECT id,kind,status,reason,owner_role,due_at,created_at,resolved_at,resolved_by${showPayloads ? ",resolution" : ""}
          FROM work_items WHERE tenant_id=$1 AND case_id=$2 ORDER BY created_at`,
-      [tenantId, caseId],
-    ),
-    c.query(
-      `SELECT e.id,e.operation,e.status,e.attempts,e.reconcile_attempts,e.external_id,e.last_error,e.first_ambiguous_at,e.last_reconcile_at,
+        [tenantId, caseId],
+      ),
+    () =>
+      c.query(
+        `SELECT e.id,e.operation,e.status,e.attempts,e.reconcile_attempts,e.external_id,e.last_error,e.first_ambiguous_at,e.last_reconcile_at,
               e.next_reconcile_at,e.escalated_at,e.superseded_at,e.superseded_reason,e.created_at,e.updated_at,
               coalesce(o.status='BLOCKED',false) AS planned
          FROM executions e LEFT JOIN outbox o ON o.tenant_id=e.tenant_id AND o.execution_id=e.id
         WHERE e.tenant_id=$1 AND e.case_id=$2 ORDER BY e.created_at, o.id NULLS LAST, e.id`,
-      [tenantId, caseId],
-    ),
-    c.query(
-      `SELECT from_state,to_state,version,actor_type,actor_id,reason,occurred_at
+        [tenantId, caseId],
+      ),
+    () =>
+      c.query(
+        `SELECT from_state,to_state,version,actor_type,actor_id,reason,occurred_at
          FROM access_case_transitions WHERE tenant_id=$1 AND case_id=$2 ORDER BY id`,
-      [tenantId, caseId],
-    ),
-    c.query(
-      `SELECT type,seconds,source,actor_id,created_at FROM case_effort_events WHERE tenant_id=$1 AND case_id=$2 ORDER BY created_at`,
-      [tenantId, caseId],
-    ),
+        [tenantId, caseId],
+      ),
+    () =>
+      c.query(
+        `SELECT type,seconds,source,actor_id,created_at FROM case_effort_events WHERE tenant_id=$1 AND case_id=$2 ORDER BY created_at`,
+        [tenantId, caseId],
+      ),
   ]);
   const chain = await verifyEvidenceChain(c, tenantId, caseId);
   const booking = await bookingView(c, tenantId, caseRow, role);

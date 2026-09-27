@@ -56,6 +56,9 @@ export async function getPracticeSettings(c: DbClient, s: Scope) {
   return row.rows[0];
 }
 
+/** A partial update: absent and undefined keys are left unchanged. */
+export type Patch<T> = { [K in keyof T]?: T[K] | undefined };
+
 /** Build "col=$n" assignments for the defined keys of a patch. */
 function assignments<P extends object>(
   patch: P,
@@ -182,7 +185,7 @@ export async function updateLocation(
   c: DbClient,
   ctx: CommandContext,
   id: string,
-  patch: Partial<LocationInput>,
+  patch: Patch<LocationInput>,
   expectedVersion?: number,
 ) {
   if (patch.timezone !== undefined && !isValidTimezone(patch.timezone))
@@ -307,7 +310,7 @@ export async function updatePractitioner(
   c: DbClient,
   ctx: CommandContext,
   id: string,
-  patch: Partial<PractitionerInput> & { locationIds?: string[] | undefined },
+  patch: Patch<PractitionerInput> & { locationIds?: string[] | undefined },
   expectedVersion?: number,
 ) {
   await lockPractitioners(c, ctx, [id]);
@@ -509,7 +512,7 @@ export async function updateAppointmentType(
   c: DbClient,
   ctx: CommandContext,
   id: string,
-  patch: Partial<AppointmentTypeInput> & {
+  patch: Patch<AppointmentTypeInput> & {
     practitionerIds?: string[] | undefined;
     locationIds?: string[] | undefined;
   },

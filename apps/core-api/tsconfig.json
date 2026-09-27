@@ -2,13 +2,33 @@
   "extends": "../../tsconfig.base.json",
   "include": ["src"],
   "references": [
-    { "path": "../../packages/config" },
-    { "path": "../../packages/contracts" },
-    { "path": "../../packages/db" },
-    { "path": "../../packages/domain" },
-    { "path": "../../packages/observability" },
-    { "path": "../../packages/policy" },
-    { "path": "../../packages/rules" }
+    {
+      "path": "../../packages/config"
+    },
+    {
+      "path": "../../packages/contracts"
+    },
+    {
+      "path": "../../packages/db"
+    },
+    {
+      "path": "../../packages/domain"
+    },
+    {
+      "path": "../../packages/observability"
+    },
+    {
+      "path": "../../packages/policy"
+    },
+    {
+      "path": "../../packages/rules"
+    },
+    {
+      "path": "../../packages/scheduling"
+    },
+    {
+      "path": "../../packages/patients"
+    }
   ],
   "compilerOptions": {
     "rootDir": "src",

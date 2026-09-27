@@ -1268,3 +1268,4 @@ export function canonicalJson(value: unknown): string {
 }
 
 export * from "./scheduling.js";
+export * from "./scheduling-api.js";

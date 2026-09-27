@@ -1,6 +1,7 @@
 import { ConfigError, loadApiConfig, type ApiConfig } from "@access/config";
 import { createPool, verifyRuntimeIdentity } from "@access/db";
-import { log } from "@access/observability";
+import { configureLogging, log } from "@access/observability";
+import { IdentifierHasher } from "@access/patients";
 import { buildApp } from "./app.js";
 import { JwtAuthenticator, SyntheticAuthenticator } from "./auth.js";
 import { IntakeExtractor } from "./extraction.js";
@@ -26,6 +27,11 @@ try {
   );
   process.exit(78);
 }
+configureLogging({
+  service: "access-api",
+  environment: config.profile,
+  build: config.buildId,
+});
 const pool = createPool({
   connectionString: config.databaseUrl,
   ssl: config.databaseSsl,
@@ -75,7 +81,12 @@ const app = await buildApp({
   authenticator:
     config.auth.mode === "jwt"
       ? new JwtAuthenticator(config.auth, pool)
-      : new SyntheticAuthenticator(),
+      : new SyntheticAuthenticator(pool),
+  hasher: new IdentifierHasher(
+    config.identifierHash.key,
+    config.identifierHash.keyId,
+  ),
+  metricsToken: config.metricsToken,
   corsOrigins: config.corsOrigins,
   info: {
     profile: config.profile,
