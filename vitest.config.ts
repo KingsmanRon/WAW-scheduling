@@ -15,6 +15,7 @@ export default defineConfig({
       "@access/config": src("config"),
       "@access/observability": src("observability"),
       "@access/db": src("db"),
+      "@access/scheduling": src("scheduling"),
     },
   },
   test: {
