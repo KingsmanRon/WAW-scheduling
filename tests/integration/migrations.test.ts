@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   DEFAULT_MIGRATIONS_DIRECTORY,
   appendEvidence,
+  discoverMigrations,
   legacyEvidenceHash,
   migrate,
   verifyEvidenceChain,
@@ -18,6 +19,13 @@ function derivedUuid(namespace: string, a: string, b: string): string {
   const h = createHash("md5").update(`${namespace}:${a}:${b}`).digest("hex");
   const variant = "89ab"[parseInt(h[16]!, 16) % 4];
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
+/** Every migration version in the repository, in order. */
+async function allVersions(): Promise<string[]> {
+  return (await discoverMigrations(DEFAULT_MIGRATIONS_DIRECTORY)).map(
+    (f) => f.version,
+  );
 }
 
 const created: string[] = [];
@@ -53,7 +61,7 @@ describe.runIf(databaseEnabled)("ledger migrations and legacy backfill", () => {
     const pool = await scratchDatabase();
     try {
       const first = await migrate(pool);
-      expect(first.applied).toHaveLength(6);
+      expect(first.applied).toEqual(await allVersions());
       const second = await migrate(pool);
       expect(second).toEqual({
         applied: [],
@@ -74,7 +82,7 @@ describe.runIf(databaseEnabled)("ledger migrations and legacy backfill", () => {
     const pool = await scratchDatabase();
     try {
       const [a, b] = await Promise.all([migrate(pool), migrate(pool)]);
-      expect([...a.applied, ...b.applied].sort()).toHaveLength(6);
+      expect([...a.applied, ...b.applied].sort()).toEqual(await allVersions());
     } finally {
       await pool.end();
     }
@@ -171,12 +179,7 @@ describe.runIf(databaseEnabled)("ledger migrations and legacy backfill", () => {
         "0001_access",
         "0002_staging_hardening",
       ]);
-      expect(result.applied).toEqual([
-        "0003_access_cases",
-        "0004_interactions_outcomes_rules",
-        "0005_workforce_identity_and_privileges",
-        "0006_appointment_operations",
-      ]);
+      expect(result.applied).toEqual((await allVersions()).slice(2));
     } finally {
       await pool.end();
     }
@@ -285,7 +288,7 @@ describe.runIf(databaseEnabled)("ledger migrations and legacy backfill", () => {
       );
 
       const result = await migrate(pool);
-      expect(result.applied).toHaveLength(4);
+      expect(result.applied).toEqual((await allVersions()).slice(2));
       const cases = await pool.query(
         "SELECT id,current_state,version,legacy_referral_state,resolution_code FROM access_cases WHERE tenant_id=$1",
         [tenant],
@@ -509,9 +512,9 @@ describe.runIf(databaseEnabled)("ledger migrations and legacy backfill", () => {
       };
       const before = await snapshot();
 
-      expect((await migrate(pool)).applied).toEqual([
-        "0006_appointment_operations",
-      ]);
+      expect(
+        (await migrate(pool, { until: "0006_appointment_operations" })).applied,
+      ).toEqual(["0006_appointment_operations"]);
       expect(await snapshot()).toEqual(before);
       const c = await pool.connect();
       try {
@@ -551,7 +554,7 @@ describe.runIf(databaseEnabled)("ledger migrations and legacy backfill", () => {
         "appointment_slot_holds",
       ]) {
         const rls = await pool.query(
-          "SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=$1",
+          "SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE relnamespace='public'::regnamespace AND relname=$1",
           [table],
         );
         expect(rls.rows[0]).toEqual({
@@ -560,6 +563,29 @@ describe.runIf(databaseEnabled)("ledger migrations and legacy backfill", () => {
         });
         expect(
           (await pool.query(`SELECT count(*)::int n FROM ${table}`)).rows[0].n,
+        ).toBe(0);
+      }
+      // 0007+ (scheduling platform) are additive too: every existing row is
+      // unchanged and the new schemas start empty with forced RLS.
+      const beforeScheduling = await snapshot();
+      const rest = await migrate(pool);
+      expect(rest.applied).toEqual((await allVersions()).slice(6));
+      expect(await snapshot()).toEqual(beforeScheduling);
+      const added = await pool.query<{
+        name: string;
+        rls: boolean;
+        forced: boolean;
+      }>(
+        `SELECT n.nspname||'.'||c.relname AS name, c.relrowsecurity AS rls, c.relforcerowsecurity AS forced
+           FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+          WHERE n.nspname IN ('platform','directory','scheduling','messaging','integration') AND c.relkind='r'`,
+      );
+      expect(added.rowCount).toBeGreaterThan(30);
+      for (const t of added.rows) {
+        expect(t.rls, t.name).toBe(true);
+        expect(
+          (await pool.query(`SELECT count(*)::int n FROM ${t.name}`)).rows[0].n,
+          t.name,
         ).toBe(0);
       }
       expect((await migrate(pool)).applied).toEqual([]);

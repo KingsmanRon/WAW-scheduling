@@ -6,4 +6,5 @@ export * from "./appointments.js";
 export * from "./rules.js";
 export * from "./metrics.js";
 export * from "./migrations.js";
+export * from "./schema-security.js";
 export * from "./seed-lib.js";

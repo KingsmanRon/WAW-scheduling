@@ -21,6 +21,7 @@
     "dev": "concurrently \"npm -w @access/core-api run dev\" \"npm -w @access/worker run dev\" \"npm -w @access/console run dev\"",
     "db:migrate": "tsx packages/db/src/migrate.ts",
     "db:seed": "tsx packages/db/src/seed.ts",
+    "db:validate": "tsx packages/db/src/validate-migrations.ts",
     "load": "tsx tests/load/profile.ts",
     "validate:infra": "bash infra/validate.sh",
     "check:secrets": "bash scripts/check-secrets.sh",

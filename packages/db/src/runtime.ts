@@ -1,6 +1,7 @@
 import pg from "pg";
 import { readFileSync } from "node:fs";
 import type { StaffRole } from "@access/contracts";
+import { APPLICATION_SCHEMAS } from "./schema-security.js";
 
 /** Error with an HTTP status and a stable, non-sensitive code. */
 export class AppError extends Error {
@@ -80,8 +81,9 @@ export async function verifyRuntimeIdentity(
   )
     throw new Error(`unsafe database identity; expected ${expected}`);
   const owns = await db.query(
-    `SELECT 1 FROM pg_class c JOIN pg_roles r ON r.oid=c.relowner
-      WHERE c.relnamespace='public'::regnamespace AND c.relkind IN ('r','p') AND r.rolname=current_user LIMIT 1`,
+    `SELECT 1 FROM pg_class c JOIN pg_roles r ON r.oid=c.relowner JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname = ANY($1) AND c.relkind IN ('r','p') AND r.rolname=current_user LIMIT 1`,
+    [APPLICATION_SCHEMAS],
   );
   if (owns.rowCount)
     throw new Error("runtime database identity owns application tables");
