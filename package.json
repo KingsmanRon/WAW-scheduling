@@ -16,7 +16,6 @@
     "test:integration": "vitest run --project integration",
     "test:fault": "vitest run tests/fault",
     "qualify:synthetic": "vitest run --project integration tests/e2e/qualification.test.ts",
-    "qualify:appointments": "vitest run --project integration tests/e2e/appointments.test.ts",
     "build": "npm run build --workspaces --if-present",
     "dev": "concurrently \"npm -w @access/core-api run dev\" \"npm -w @access/worker run dev\" \"npm -w @access/console run dev\"",
     "db:migrate": "tsx packages/db/src/migrate.ts",

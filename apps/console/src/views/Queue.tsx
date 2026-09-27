@@ -3,14 +3,11 @@ import { api } from "../api";
 import { StateBadge, StationTrack } from "../components/AccessLine";
 import { Icon } from "../components/Icon";
 import {
-  CASE_TYPE_LABELS,
   duration,
-  kindLabel,
   label,
   reasonLabel,
   RESOLUTION_LABELS,
   roleLabel,
-  WORKFLOW_LABELS,
 } from "../format";
 import { PageHeader } from "../layout/PageHeader";
 import { lastOpenedCase, queueCache as cache } from "../queueCache";
@@ -24,21 +21,15 @@ const STAGES: [string, string][] = [
   ["information_missing", "Information missing"],
   ["ready", "Ready"],
   ["ready_for_booking", "Ready for booking"],
-  ["booking_in_progress", "Booking in progress"],
   ["waiting", "Waiting"],
   ["booked", "Booked"],
   ["closed", "Closed"],
-];
-/** Changes to booked appointments. */
-const CHANGES: [string, string][] = [
-  ["reschedule", "Reschedule"],
-  ["cancellation", "Cancellation"],
 ];
 const OTHER: [string, string][] = [
   ["exceptions", "Exceptions"],
   ["all", "All"],
 ];
-const NAMES = Object.fromEntries([ATTENTION, ...STAGES, ...CHANGES, ...OTHER]);
+const NAMES = Object.fromEntries([ATTENTION, ...STAGES, ...OTHER]);
 const LIMIT = 200;
 
 /** Plain words for the machine codes that appear inside API strings. */
@@ -60,19 +51,6 @@ const followUpDue = (item: QueueItem) =>
   (item.state === "READY_FOR_BOOKING" || item.state === "WAITING") &&
   !!item.follow_up_due_at &&
   new Date(item.follow_up_due_at).getTime() <= Date.now();
-const isReferral = (item: QueueItem) =>
-  (item.case_type ?? "REFERRAL") === "REFERRAL";
-/** Destination progress of an appointment step, without connector terms. */
-function appointmentDestination(status: string): string {
-  if (status === "Reconciling") return "Checking with the destination";
-  if (status.startsWith("Unknown")) return "Unconfirmed: staff check needed";
-  if (status === "Connector: SUCCEEDED") return "Up to date";
-  if (/^Connector: (PENDING|LEASED|RETRYABLE)$/.test(status))
-    return "Sending to the destination";
-  if (status === "Connector: PERMANENT" || status === "Connector: POISON")
-    return "Last step refused";
-  return "Not sent yet";
-}
 
 export function Queue({ open }: { open: (caseId: string) => void }) {
   const session = useSession();
@@ -239,12 +217,9 @@ export function Queue({ open }: { open: (caseId: string) => void }) {
               <li key={s[0]}>{lens(s, " lens--station")}</li>
             ))}
           </ol>
-          <span className="lens-more">
-            {CHANGES.map((o) => lens(o))}
-            {OTHER.map((o) =>
-              lens(o, o[0] === "exceptions" ? " lens--exception" : ""),
-            )}
-          </span>
+          {OTHER.map((o) =>
+            lens(o, o[0] === "exceptions" ? " lens--exception" : ""),
+          )}
         </div>
       </div>
 
@@ -301,10 +276,6 @@ export function Queue({ open }: { open: (caseId: string) => void }) {
             <tbody role="rowgroup" ref={body}>
               {items.map((i) => {
                 const due = followUpDue(i);
-                const referral = isReferral(i);
-                const destination = referral
-                  ? i.destination_status
-                  : appointmentDestination(i.destination_status);
                 return (
                   <tr
                     role="row"
@@ -317,27 +288,9 @@ export function Queue({ open }: { open: (caseId: string) => void }) {
                   >
                     <td role="cell" className="c-case">
                       <span className="ref mono">{i.display_ref}</span>
-                      {!referral && (
-                        <span className="kind">
-                          <span
-                            className={`kind__tag kind__tag--${i.case_type.toLowerCase().replace(/_/g, "-")}`}
-                          >
-                            {CASE_TYPE_LABELS[i.case_type] ??
-                              label(i.case_type)}
-                          </span>
-                          {i.origin_display_ref && (
-                            <span className="kind__for">
-                              for{" "}
-                              <span className="mono">
-                                {i.origin_display_ref}
-                              </span>
-                            </span>
-                          )}
-                        </span>
-                      )}
                       {i.open_work_items.length > 0 && (
                         <span className="work">
-                          {i.open_work_items.map(kindLabel).join(" · ")}
+                          {i.open_work_items.map(label).join(" · ")}
                         </span>
                       )}
                     </td>
@@ -346,18 +299,8 @@ export function Queue({ open }: { open: (caseId: string) => void }) {
                         <StationTrack
                           state={i.state}
                           workKinds={i.open_work_items}
-                          caseType={i.case_type}
                         />
-                        <StateBadge
-                          state={i.state}
-                          text={
-                            !referral && i.workflow_status
-                              ? i.state === "EXCEPTION"
-                                ? "Needs attention"
-                                : WORKFLOW_LABELS[i.workflow_status]
-                              : undefined
-                          }
-                        />
+                        <StateBadge state={i.state} />
                       </div>
                       {i.exception_reason && (
                         <span className="reason">
@@ -379,10 +322,10 @@ export function Queue({ open }: { open: (caseId: string) => void }) {
                     </td>
                     <td
                       role="cell"
-                      className={`c-destination ${destinationTone(destination)}`}
+                      className={`c-destination ${destinationTone(i.destination_status)}`}
                       data-label="Destination"
                     >
-                      {destination}
+                      {i.destination_status}
                     </td>
                     <td role="cell" className="c-outcome" data-label="Outcome">
                       {outcomeText(i.outcome_status)}

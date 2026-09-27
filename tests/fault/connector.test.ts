@@ -74,8 +74,9 @@ describe("mock destination semantics", () => {
     // Configured but not implemented by the mock: never enabled.
     expect(gate.isEnabled("message.send")).toBe(false);
     // Implemented but not configured: never enabled.
-    expect(gate.isEnabled("appointment.create")).toBe(false);
     expect(gate.isEnabled("appointment.status.read")).toBe(false);
+    // Appointment writes are not connector capabilities at all.
+    expect(gate.isEnabled("appointment.create")).toBe(false);
     expect(
       new CapabilityGate(new NoConnector(), ["referral.create"]).list(),
     ).toEqual([]);

@@ -4,14 +4,9 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { Pool } from "pg";
 import { ZodError, z } from "zod";
 import {
-  APPOINTMENT_ACTIONS,
-  APPOINTMENT_CHANGES,
   CASE_ACTIONS,
   CASE_TYPES,
-  ENABLED_CASE_TYPES,
   QUEUE_FILTERS,
-  appointmentActionSchema,
-  appointmentChangeSchema,
   caseActionSchema,
   cohortQuerySchema,
   createCaseRequestSchema,
@@ -35,7 +30,7 @@ import {
 } from "@access/db";
 import { errorFields, log, Metrics } from "@access/observability";
 import type { IdentifierHasher } from "@access/patients";
-import { assertDirectlyCreatable, authorize } from "@access/policy";
+import { assertCaseTypeEnabled, authorize } from "@access/policy";
 import { RuleValidationError } from "@access/rules";
 import {
   SchedulingError,
@@ -43,7 +38,7 @@ import {
 } from "@access/scheduling";
 import type { AuthContext, Authenticator } from "./auth.js";
 import { registerPracticeRoutes } from "./practice-routes.js";
-import { appointmentDetail, caseDetail, queue } from "./queries.js";
+import { caseDetail, queue } from "./queries.js";
 import { CaseService } from "./service.js";
 
 export interface AppDeps {
@@ -219,31 +214,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     );
     return reply.code(result.deduplicated ? 200 : 201).send(result);
   });
-  // Generic case creation: only referrals are created directly; appointment
-  // operations cases start from a referral or a committed appointment.
+  // Generic case creation: only enabled case types execute.
   app.post("/v1/cases", async (req, reply) => {
     const a = await auth(req);
     authorize(a.role, "referral.ingest");
     const { case_type, ...rest } = createCaseRequestSchema.parse(req.body);
-    assertDirectlyCreatable(case_type);
+    assertCaseTypeEnabled(case_type);
     const input = ingestRequestSchema.parse(rest);
     const result = await deps.service.ingestReferral(a, input);
     return reply.code(result.deduplicated ? 200 : 201).send(result);
   });
   app.get("/v1/case-types", async (req) => {
     await auth(req);
-    return CASE_TYPES.map((t) => ({
-      case_type: t,
-      enabled: ENABLED_CASE_TYPES.includes(t),
-      created_from:
-        t === "REFERRAL"
-          ? "intake"
-          : t === "APPOINTMENT_REQUEST"
-            ? "referral"
-            : ENABLED_CASE_TYPES.includes(t)
-              ? "appointment"
-              : null,
-    }));
+    return CASE_TYPES.map((t) => ({ case_type: t, enabled: t === "REFERRAL" }));
   });
 
   app.get("/v1/cases", async (req) => {
@@ -303,56 +286,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       a,
       caseId,
       caseActionSchema.parse(req.body),
-    );
-  });
-  // Appointment operations: booking sub-flow steps on an APPOINTMENT_REQUEST,
-  // RESCHEDULING_REQUEST or CANCELLATION_REQUEST case.
-  app.post("/v1/cases/:caseId/appointment-actions", async (req) => {
-    const a = await auth(req);
-    // Coordinators and above; each case type then needs its own permission.
-    authorize(a.role, "appointment.book");
-    z.object({ action: z.enum(APPOINTMENT_ACTIONS) })
-      .passthrough()
-      .parse(req.body);
-    const caseId = uuid.parse((req.params as { caseId: string }).caseId);
-    return deps.service.performAppointmentAction(
-      a,
-      caseId,
-      appointmentActionSchema.parse(req.body),
-    );
-  });
-  app.get("/v1/appointments/:appointmentId", async (req) => {
-    const a = await auth(req);
-    authorize(a.role, "case.read");
-    const id = uuid.parse(
-      (req.params as { appointmentId: string }).appointmentId,
-    );
-    return deps.service.runInTenant(a, (c) =>
-      appointmentDetail(c, a.tenantId, id, a.role),
-    );
-  });
-  app.post("/v1/appointments/:appointmentId/actions", async (req) => {
-    const a = await auth(req);
-    // Authorise the named change before validating the rest of the body.
-    const named = z
-      .object({ action: z.enum(APPOINTMENT_CHANGES) })
-      .passthrough()
-      .parse(req.body);
-    authorize(
-      a.role,
-      named.action === "confirm"
-        ? "appointment.confirm"
-        : named.action === "reschedule"
-          ? "appointment.reschedule"
-          : "appointment.cancel",
-    );
-    const id = uuid.parse(
-      (req.params as { appointmentId: string }).appointmentId,
-    );
-    return deps.service.changeAppointment(
-      a,
-      id,
-      appointmentChangeSchema.parse(req.body),
     );
   });
   app.post("/v1/observations/import", async (req) => {

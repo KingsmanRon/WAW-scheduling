@@ -47,7 +47,5 @@ export function measureInputs(m: Measure | undefined): string {
     typeof inputs.total_touches === "number"
   )
     return `${inputs.reported_touches} of ${inputs.total_touches} touches timed`;
-  if (typeof inputs.escalated_to_staff === "number")
-    return `${inputs.escalated_to_staff} needed a staff check`;
   return "";
 }

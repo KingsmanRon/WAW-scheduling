@@ -59,17 +59,11 @@ log("info", "worker_started", {
   capability: gate.list().join(","),
 });
 let lastSweep = 0;
-let lastHoldSweep = 0;
 for (;;) {
   try {
     const worked = await dispatcher.tick();
     await dispatcher.reconcile();
     await dispatcher.pollOutcomes();
-    // Holds last minutes, so their expiry is swept more often.
-    if (Date.now() - lastHoldSweep > 5_000) {
-      await dispatcher.sweepAppointments();
-      lastHoldSweep = Date.now();
-    }
     if (Date.now() - lastSweep > 60_000) {
       await dispatcher.sweepTimers();
       lastSweep = Date.now();

@@ -3,7 +3,6 @@ import {
   appointmentOutcomeSchema,
   connectorRequestSchema,
   connectorResultSchema,
-  isAppointmentCaseType,
   type ConnectorRequest,
   type ConnectorResult,
   type ObservationType,
@@ -30,7 +29,6 @@ import {
 import { errorFields, log } from "@access/observability";
 import { authorizeOperation } from "@access/policy";
 import { ownerFor, type RuleDefinition } from "@access/rules";
-import { AppointmentSettlement, validAppointmentData } from "./appointments.js";
 import {
   AmbiguousConnectorError,
   InvalidConnectorResponseError,
@@ -66,29 +64,10 @@ interface OutboxItem {
   created_at: Date;
 }
 type Outcome =
-  | { kind: "succeeded"; externalId: string; data?: Record<string, unknown> }
+  | { kind: "succeeded"; externalId: string }
   | { kind: "retryable"; code: string }
   | { kind: "failed"; code: string; workKind: WorkItemKind }
-  | { kind: "ambiguous"; code: string }
-  /** Appointment steps no longer expected: never sent. */
-  | { kind: "skipped"; code: string };
-type ReconcileOutcome =
-  | { kind: "succeeded"; externalId: string; data?: Record<string, unknown> }
-  | { kind: "inconclusive"; code: string }
-  | { kind: "final"; code: string }
-  /** Appointment operations: read-back proved the effect absent. */
-  | { kind: "not_committed" };
-interface DueExecution {
-  id: string;
-  case_id: string;
-  subject_type: "referral" | "case";
-  subject_id: string;
-  operation: string;
-  reconcile_attempts: number;
-  correlation_id: string;
-  payload: Record<string, unknown>;
-  case_type: string;
-}
+  | { kind: "ambiguous"; code: string };
 
 const connectorActor = (connector: Connector): ActorRef => ({
   type: "CONNECTOR",
@@ -102,7 +81,6 @@ const connectorActor = (connector: Connector): ActorRef => ({
  */
 export class Dispatcher {
   private leaseSeconds: number;
-  private appointments: AppointmentSettlement;
   constructor(
     private pool: Pool,
     private connector: Connector,
@@ -110,9 +88,6 @@ export class Dispatcher {
     private options: DispatcherOptions,
   ) {
     this.leaseSeconds = options.leaseSeconds ?? 30;
-    this.appointments = new AppointmentSettlement(connector.name, () =>
-      gate.isEnabled("appointment.hold"),
-    );
   }
 
   private async tenants(): Promise<string[]> {
@@ -245,24 +220,11 @@ export class Dispatcher {
       });
       return true;
     }
-    // An appointment step is sent only while its request still expects it,
-    // exactly as recorded; nothing reaches the destination otherwise.
-    let prepared: ConnectorRequest | undefined;
-    if (isAppointmentCaseType(item.case_type)) {
-      const step = await this.tx(tenantId, (c) =>
-        this.appointments.prepare(c, item),
-      );
-      if ("skip" in step) {
-        await this.settle(item, { kind: "skipped", code: step.skip });
-        return true;
-      }
-      prepared = step.request;
-    }
     let outcome: Outcome;
     try {
-      const request = prepared ?? this.request(item);
+      const request = this.request(item);
       outcome = this.interpret(
-        request,
+        item.execution_id,
         await this.connector.execute(request),
         decision.consequential,
       );
@@ -275,11 +237,10 @@ export class Dispatcher {
 
   /** Validate and bind a connector result to the intended execution. */
   private interpret(
-    request: ConnectorRequest,
+    executionId: string,
     raw: unknown,
     consequential: boolean,
   ): Outcome {
-    const executionId = request.execution_id;
     const parsed = connectorResultSchema.safeParse(raw);
     if (!parsed.success)
       return consequential
@@ -298,15 +259,7 @@ export class Dispatcher {
     }
     switch (result.status) {
       case "SUCCEEDED":
-        if (!validAppointmentData(request.operation, result.data, request))
-          return consequential
-            ? { kind: "ambiguous", code: "INVALID_OPERATION_DATA" }
-            : { kind: "retryable", code: "INVALID_OPERATION_DATA" };
-        return {
-          kind: "succeeded",
-          externalId: result.external_id,
-          ...(result.data ? { data: result.data } : {}),
-        };
+        return { kind: "succeeded", externalId: result.external_id };
       case "RETRYABLE":
         return { kind: "retryable", code: result.code };
       case "PERMANENT":
@@ -325,11 +278,6 @@ export class Dispatcher {
         };
       case "AMBIGUOUS":
         return { kind: "ambiguous", code: "CONNECTOR_REPORTED_AMBIGUOUS" };
-      case "NOT_COMMITTED":
-        // A read-back result has no meaning for a write: its effect is unknown.
-        return consequential
-          ? { kind: "ambiguous", code: "UNEXPECTED_READBACK_RESULT" }
-          : { kind: "retryable", code: "UNEXPECTED_READBACK_RESULT" };
     }
   }
   /** Thrown errors: only an explicit known-not-sent error is retried. */
@@ -374,34 +322,21 @@ export class Dispatcher {
         actor: connectorActor(this.connector),
       };
       const subject: Subject = { type: item.subject_type, id: item.subject_id };
-      // Appointment operations settle against their request; referral
-      // settlement below is unchanged.
-      const appointment = isAppointmentCaseType(item.case_type);
       switch (outcome.kind) {
         case "succeeded":
           await c.query(
             "UPDATE outbox SET status='DONE',lease_until=null,last_error=null WHERE tenant_id=$1 AND id=$2",
             [item.tenant_id, item.id],
           );
-          if (appointment)
-            await this.appointments.succeeded(
-              c,
-              ctx,
-              item,
-              outcome.externalId,
-              outcome.data,
-              "CONNECTOR",
-            );
-          else
-            await this.commitDestination(
-              c,
-              ctx,
-              item.case_id,
-              subject,
-              item.execution_id,
-              outcome.externalId,
-              "CONNECTOR",
-            );
+          await this.commitDestination(
+            c,
+            ctx,
+            item.case_id,
+            subject,
+            item.execution_id,
+            outcome.externalId,
+            "CONNECTOR",
+          );
           break;
         case "retryable":
           if (item.attempts < this.options.maxDispatch) {
@@ -433,29 +368,19 @@ export class Dispatcher {
             "UPDATE executions SET status='POISON',last_error=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2",
             [item.tenant_id, item.execution_id, outcome.code],
           );
-          // Every attempt was known not to have committed: a refusal.
-          if (appointment)
-            await this.appointments.failed(
-              c,
-              { ...ctx, actor: WORKER_ACTOR },
-              item,
-              outcome.code,
-              "CONNECTOR",
-            );
-          else
-            await this.escalate(
-              c,
-              { ...ctx, actor: WORKER_ACTOR },
-              item.case_id,
-              subject,
-              "dispatch_poisoned",
-              "CONNECTOR",
-              {
-                execution_id: item.execution_id,
-                attempts: item.attempts,
-                code: outcome.code,
-              },
-            );
+          await this.escalate(
+            c,
+            { ...ctx, actor: WORKER_ACTOR },
+            item.case_id,
+            subject,
+            "dispatch_poisoned",
+            "CONNECTOR",
+            {
+              execution_id: item.execution_id,
+              attempts: item.attempts,
+              code: outcome.code,
+            },
+          );
           log("error", "dispatch_became_poison", {
             execution_id: item.execution_id,
             retry_attempt: item.attempts,
@@ -471,27 +396,18 @@ export class Dispatcher {
             "UPDATE executions SET status='PERMANENT',last_error=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2",
             [item.tenant_id, item.execution_id, outcome.code],
           );
-          if (appointment)
-            await this.appointments.failed(
-              c,
-              ctx,
-              item,
-              outcome.code,
-              outcome.workKind,
-            );
-          else
-            await this.escalate(
-              c,
-              ctx,
-              item.case_id,
-              subject,
-              "destination_failed",
-              outcome.workKind,
-              {
-                execution_id: item.execution_id,
-                code: outcome.code,
-              },
-            );
+          await this.escalate(
+            c,
+            ctx,
+            item.case_id,
+            subject,
+            "destination_failed",
+            outcome.workKind,
+            {
+              execution_id: item.execution_id,
+              code: outcome.code,
+            },
+          );
           log("warn", "dispatch_failed", {
             execution_id: item.execution_id,
             code: outcome.code,
@@ -512,39 +428,18 @@ export class Dispatcher {
               this.options.reconcileBaseSeconds,
             ],
           );
-          if (appointment)
-            await this.appointments.ambiguous(c, ctx, item, outcome.code);
-          else {
-            // Evidence without a state change: the case stays DESTINATION_PENDING.
-            const caseRow = await lockCase(c, item.tenant_id, item.case_id);
-            await evidence(c, ctx, caseRow, subject, {
-              eventType: "destination_ambiguous",
-              payload: { execution_id: item.execution_id, code: outcome.code },
-            });
-          }
+          // Evidence without a state change: the case stays DESTINATION_PENDING.
+          const caseRow = await lockCase(c, item.tenant_id, item.case_id);
+          await evidence(c, ctx, caseRow, subject, {
+            eventType: "destination_ambiguous",
+            payload: { execution_id: item.execution_id, code: outcome.code },
+          });
           log("warn", "ambiguous_execution_detected", {
             execution_id: item.execution_id,
             code: outcome.code,
           });
           break;
         }
-        case "skipped":
-          await c.query(
-            "UPDATE outbox SET status='DONE',lease_until=null,last_error=$3 WHERE tenant_id=$1 AND id=$2",
-            [item.tenant_id, item.id, outcome.code],
-          );
-          await this.appointments.skipped(
-            c,
-            { ...ctx, actor: WORKER_ACTOR },
-            item,
-            outcome.code,
-          );
-          log("warn", "appointment_step_skipped", {
-            case_id: item.case_id,
-            execution_id: item.execution_id,
-            code: outcome.code,
-          });
-          break;
       }
     });
   }
@@ -680,10 +575,18 @@ export class Dispatcher {
   async reconcile(): Promise<number> {
     let count = 0;
     for (const tenant of await this.tenants()) {
-      // Staff asked for another read-back after automated checking stopped.
-      await this.tx(tenant, (c) => this.appointments.rearmRechecks(c, tenant));
       const due = await this.tx(tenant, async (c) => {
-        const rows = await c.query<DueExecution>(
+        const rows = await c.query<{
+          id: string;
+          case_id: string;
+          subject_type: "referral" | "case";
+          subject_id: string;
+          operation: string;
+          reconcile_attempts: number;
+          correlation_id: string;
+          payload: Record<string, unknown>;
+          case_type: string;
+        }>(
           `SELECT e.id,e.case_id,e.subject_type,e.subject_id,e.operation,e.reconcile_attempts,
                   coalesce(e.correlation_id,o.correlation_id) AS correlation_id,o.payload,c.case_type
              FROM executions e
@@ -708,9 +611,59 @@ export class Dispatcher {
           correlation_id: x.correlation_id,
           retry_attempt: attempt,
         });
-        const outcome = isAppointmentCaseType(x.case_type)
-          ? await this.readBackAppointment(tenant, x)
-          : await this.readBackReferral(tenant, x);
+        let outcome:
+          | { kind: "succeeded"; externalId: string }
+          | { kind: "inconclusive"; code: string }
+          | { kind: "final"; code: string };
+        if (!this.gate.isEnabled("referral.status.read"))
+          outcome = { kind: "final", code: "READBACK_UNSUPPORTED" };
+        else
+          try {
+            const request: ConnectorRequest = connectorRequestSchema.safeParse(
+              x.payload,
+            ).success
+              ? connectorRequestSchema.parse(x.payload)
+              : {
+                  schema_version: "connector-request.v1",
+                  execution_id: x.id,
+                  tenant_id: tenant,
+                  case_id: x.case_id,
+                  subject: { type: x.subject_type, id: x.subject_id },
+                  operation: x.operation as Operation,
+                  correlation_id: x.correlation_id,
+                  payload: { referral_id: x.subject_id },
+                };
+            const parsed = connectorResultSchema.safeParse(
+              await this.connector.reconcile(request),
+            );
+            if (!parsed.success)
+              outcome = {
+                kind: "inconclusive",
+                code: "INVALID_CONNECTOR_RESPONSE",
+              };
+            else if (parsed.data.execution_id !== x.id)
+              outcome = { kind: "inconclusive", code: "EXECUTION_ID_MISMATCH" };
+            else if (parsed.data.status === "SUCCEEDED")
+              outcome = {
+                kind: "succeeded",
+                externalId: parsed.data.external_id,
+              };
+            else if (
+              parsed.data.status === "AMBIGUOUS" ||
+              parsed.data.status === "RETRYABLE"
+            )
+              outcome = { kind: "inconclusive", code: "READBACK_INCONCLUSIVE" };
+            else
+              outcome = {
+                kind: "final",
+                code: `READBACK_${parsed.data.status}`,
+              };
+          } catch (error) {
+            outcome =
+              error instanceof UnsupportedOperationError
+                ? { kind: "final", code: "READBACK_UNSUPPORTED" }
+                : { kind: "inconclusive", code: "READBACK_ERROR" };
+          }
         await this.applyReconcile(tenant, x, attempt, outcome);
         count++;
       }
@@ -718,122 +671,21 @@ export class Dispatcher {
     return count;
   }
 
-  private async readBackReferral(
-    tenant: string,
-    x: DueExecution,
-  ): Promise<ReconcileOutcome> {
-    if (!this.gate.isEnabled("referral.status.read"))
-      return { kind: "final", code: "READBACK_UNSUPPORTED" };
-    try {
-      const request: ConnectorRequest = connectorRequestSchema.safeParse(
-        x.payload,
-      ).success
-        ? connectorRequestSchema.parse(x.payload)
-        : {
-            schema_version: "connector-request.v1",
-            execution_id: x.id,
-            tenant_id: tenant,
-            case_id: x.case_id,
-            subject: { type: x.subject_type, id: x.subject_id },
-            operation: x.operation as Operation,
-            correlation_id: x.correlation_id,
-            payload: { referral_id: x.subject_id },
-          };
-      const parsed = connectorResultSchema.safeParse(
-        await this.connector.reconcile(request),
-      );
-      if (!parsed.success)
-        return { kind: "inconclusive", code: "INVALID_CONNECTOR_RESPONSE" };
-      if (parsed.data.execution_id !== x.id)
-        return { kind: "inconclusive", code: "EXECUTION_ID_MISMATCH" };
-      if (parsed.data.status === "SUCCEEDED")
-        return { kind: "succeeded", externalId: parsed.data.external_id };
-      if (
-        parsed.data.status === "AMBIGUOUS" ||
-        parsed.data.status === "RETRYABLE"
-      )
-        return { kind: "inconclusive", code: "READBACK_INCONCLUSIVE" };
-      return { kind: "final", code: `READBACK_${parsed.data.status}` };
-    } catch (error) {
-      return error instanceof UnsupportedOperationError
-        ? { kind: "final", code: "READBACK_UNSUPPORTED" }
-        : { kind: "inconclusive", code: "READBACK_ERROR" };
-    }
-  }
-
-  /**
-   * Read an appointment write back by its execution_id with the request
-   * that was sent. Only NOT_COMMITTED - the destination authoritatively
-   * holds no effect - ever permits the step to be tried again.
-   */
-  private async readBackAppointment(
-    tenant: string,
-    x: DueExecution,
-  ): Promise<ReconcileOutcome> {
-    if (!this.gate.isEnabled("appointment.status.read"))
-      return { kind: "final", code: "READBACK_UNSUPPORTED" };
-    const step = await this.tx(tenant, (c) =>
-      this.appointments.prepare(c, this.appointmentItem(tenant, x)),
-    );
-    if ("skip" in step) return { kind: "final", code: `READBACK_${step.skip}` };
-    try {
-      const parsed = connectorResultSchema.safeParse(
-        await this.connector.reconcile(step.request),
-      );
-      if (!parsed.success)
-        return { kind: "inconclusive", code: "INVALID_CONNECTOR_RESPONSE" };
-      if (parsed.data.execution_id !== x.id)
-        return { kind: "inconclusive", code: "EXECUTION_ID_MISMATCH" };
-      switch (parsed.data.status) {
-        case "SUCCEEDED":
-          return validAppointmentData(
-            x.operation,
-            parsed.data.data,
-            step.request,
-          )
-            ? {
-                kind: "succeeded",
-                externalId: parsed.data.external_id,
-                ...(parsed.data.data ? { data: parsed.data.data } : {}),
-              }
-            : { kind: "inconclusive", code: "INVALID_OPERATION_DATA" };
-        case "NOT_COMMITTED":
-          return { kind: "not_committed" };
-        case "AMBIGUOUS":
-        case "RETRYABLE":
-          return { kind: "inconclusive", code: "READBACK_INCONCLUSIVE" };
-        default:
-          return { kind: "final", code: `READBACK_${parsed.data.status}` };
-      }
-    } catch (error) {
-      if (error instanceof UnsupportedOperationError)
-        return { kind: "final", code: "READBACK_UNSUPPORTED" };
-      if (error instanceof PermanentConnectorError)
-        return {
-          kind: "final",
-          code: error.code.startsWith("READBACK_")
-            ? error.code
-            : `READBACK_${error.code}`,
-        };
-      return { kind: "inconclusive", code: "READBACK_ERROR" };
-    }
-  }
-
-  private appointmentItem(tenant: string, x: DueExecution) {
-    return {
-      tenant_id: tenant,
-      case_id: x.case_id,
-      operation: x.operation,
-      execution_id: x.id,
-      payload: x.payload,
-    };
-  }
-
   private async applyReconcile(
     tenantId: string,
-    x: DueExecution,
+    x: {
+      id: string;
+      case_id: string;
+      subject_type: "referral" | "case";
+      subject_id: string;
+      correlation_id: string;
+      reconcile_attempts: number;
+    },
     attempt: number,
-    outcome: ReconcileOutcome,
+    outcome:
+      | { kind: "succeeded"; externalId: string }
+      | { kind: "inconclusive"; code: string }
+      | { kind: "final"; code: string },
   ) {
     await this.tx(tenantId, async (c) => {
       // Fence: only the reconciler that claimed this attempt may apply it.
@@ -848,51 +700,23 @@ export class Dispatcher {
         actor: connectorActor(this.connector),
       };
       const subject: Subject = { type: x.subject_type, id: x.subject_id };
-      const appointment = isAppointmentCaseType(x.case_type);
       if (outcome.kind === "succeeded") {
         await c.query(
           "UPDATE executions SET reconcile_attempts=$3,last_reconcile_at=now() WHERE tenant_id=$1 AND id=$2",
           [tenantId, x.id, attempt],
         );
-        if (appointment)
-          await this.appointments.succeeded(
-            c,
-            ctx,
-            this.appointmentItem(tenantId, x),
-            outcome.externalId,
-            outcome.data,
-            "RECONCILIATION",
-          );
-        else
-          await this.commitDestination(
-            c,
-            ctx,
-            x.case_id,
-            subject,
-            x.id,
-            outcome.externalId,
-            "RECONCILIATION",
-          );
+        await this.commitDestination(
+          c,
+          ctx,
+          x.case_id,
+          subject,
+          x.id,
+          outcome.externalId,
+          "RECONCILIATION",
+        );
         log("info", "reconciliation_succeeded", {
           execution_id: x.id,
           retry_attempt: attempt,
-        });
-        return;
-      }
-      if (outcome.kind === "not_committed") {
-        await c.query(
-          "UPDATE executions SET reconcile_attempts=$3,last_reconcile_at=now() WHERE tenant_id=$1 AND id=$2",
-          [tenantId, x.id, attempt],
-        );
-        await this.appointments.notCommitted(
-          c,
-          ctx,
-          this.appointmentItem(tenantId, x),
-        );
-        log("info", "reconciliation_not_committed", {
-          execution_id: x.id,
-          retry_attempt: attempt,
-          operation: x.operation,
         });
         return;
       }
@@ -923,52 +747,28 @@ export class Dispatcher {
                 reconcile_lease_until=NULL,escalated_at=now(),last_error=$4,updated_at=now() WHERE tenant_id=$1 AND id=$2`,
         [tenantId, x.id, attempt, outcome.code],
       );
-      const code =
-        outcome.code === "READBACK_INCONCLUSIVE"
-          ? "RECONCILIATION_EXHAUSTED"
-          : outcome.code;
-      if (appointment)
-        await this.appointments.escalated(
-          c,
-          ctx,
-          this.appointmentItem(tenantId, x),
-          code,
-        );
-      else
-        await this.escalate(
-          c,
-          { ...ctx, actor: WORKER_ACTOR },
-          x.case_id,
-          subject,
-          "reconciliation_escalated",
-          "CONNECTOR",
-          {
-            execution_id: x.id,
-            attempts: attempt,
-            code,
-          },
-        );
+      await this.escalate(
+        c,
+        { ...ctx, actor: WORKER_ACTOR },
+        x.case_id,
+        subject,
+        "reconciliation_escalated",
+        "CONNECTOR",
+        {
+          execution_id: x.id,
+          attempts: attempt,
+          code:
+            outcome.code === "READBACK_INCONCLUSIVE"
+              ? "RECONCILIATION_EXHAUSTED"
+              : outcome.code,
+        },
+      );
       log("error", "reconciliation_escalated", {
         execution_id: x.id,
         retry_attempt: attempt,
         code: outcome.code,
       });
     });
-  }
-
-  // -------------------------------------------------------------------------
-  // Appointment timers: hold expiry, steps that will never run
-  // -------------------------------------------------------------------------
-
-  async sweepAppointments(): Promise<number> {
-    let changed = 0;
-    for (const tenant of await this.tenants())
-      changed += await this.tx(tenant, async (c) => {
-        const expired = await this.appointments.expireHolds(c, tenant);
-        const closed = await this.appointments.closeSupersededSteps(c, tenant);
-        return expired + closed;
-      });
-    return changed;
   }
 
   // -------------------------------------------------------------------------

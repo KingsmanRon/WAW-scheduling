@@ -636,31 +636,23 @@ describe.runIf(databaseEnabled)("ACCESS v1.1 acceptance suite", () => {
 
   it("17 disabled case types cannot execute", async () => {
     const tenant = await newTenant();
-    const res = await t.app.inject({
-      method: "POST",
-      url: "/v1/cases",
-      headers: staff(tenant),
-      payload: { case_type: "STATUS_ENQUIRY", ...ingestBody() },
-    });
-    expect(res.statusCode).toBe(422);
-    expect(res.json().error).toBe("CASE_TYPE_DISABLED");
-    // Enabled appointment operations cases are never created directly.
+    // The retired appointment request types are refused like any other.
     for (const caseType of [
+      "STATUS_ENQUIRY",
       "APPOINTMENT_REQUEST",
       "RESCHEDULING_REQUEST",
       "CANCELLATION_REQUEST",
     ]) {
-      const direct = await t.app.inject({
+      const res = await t.app.inject({
         method: "POST",
         url: "/v1/cases",
         headers: staff(tenant),
         payload: { case_type: caseType, ...ingestBody() },
       });
-      expect(direct.statusCode, caseType).toBe(422);
-      expect(direct.json().error).toBe("CASE_TYPE_NOT_CREATABLE");
+      expect(res.statusCode, caseType).toBe(422);
+      expect(res.json().error).toBe("CASE_TYPE_DISABLED");
     }
-    expect((await tableCounts(tenant)).access_cases).toBe(0);
-    // Tamper: a still-disabled case type with a consequential outbox item.
+    // Tamper: a disabled case type with a consequential outbox item.
     const caseId = randomUUID();
     await ownerPool().query(
       "INSERT INTO access_cases(id,tenant_id,case_type,source_channel,current_state,opened_at) VALUES($1,$2,'STATUS_ENQUIRY','API','DESTINATION_PENDING',now())",
@@ -668,7 +660,7 @@ describe.runIf(databaseEnabled)("ACCESS v1.1 acceptance suite", () => {
     );
     const executionId = randomUUID();
     await ownerPool().query(
-      "INSERT INTO outbox(tenant_id,case_id,subject_type,subject_id,operation,aggregate_version,execution_id,payload,correlation_id) VALUES($1,$2,'case',$2,'appointment.create',0,$3,'{}',$2)",
+      "INSERT INTO outbox(tenant_id,case_id,subject_type,subject_id,operation,aggregate_version,execution_id,payload,correlation_id) VALUES($1,$2,'case',$2,'referral.create',0,$3,'{}',$2)",
       [tenant, caseId, executionId],
     );
     const connector = mock();
@@ -725,10 +717,12 @@ describe.runIf(databaseEnabled)("ACCESS v1.1 acceptance suite", () => {
     expect(manual.json().state).toBe("READY_FOR_BOOKING");
   });
 
-  it("19 a case type cannot authorise an action intended for another case type", async () => {
+  it("19 a referral case cannot push an appointment write through the connector", async () => {
     const tenant = await newTenant();
     const r = await ingest(t, tenant);
-    // Tamper: attach an appointment operation to the referral case's outbox.
+    // Tamper: attach an appointment write to the referral case's outbox.
+    // Connectors have no appointment write operations at all: bookings
+    // exist only in the Scheduling Core.
     const executionId = randomUUID();
     await ownerPool().query(
       "UPDATE outbox SET status='DONE' WHERE case_id=$1",
@@ -747,7 +741,7 @@ describe.runIf(databaseEnabled)("ACCESS v1.1 acceptance suite", () => {
     );
     expect(e.rows[0]).toEqual({
       status: "PERMANENT",
-      last_error: "OPERATION_NOT_PERMITTED_FOR_CASE_TYPE",
+      last_error: "UNKNOWN_OPERATION",
     });
   });
 

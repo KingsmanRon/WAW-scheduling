@@ -142,39 +142,65 @@ describe.runIf(databaseEnabled)("concurrent scheduling", () => {
   });
 
   it("the database alone admits exactly one of 25 concurrent overlapping inserts", async () => {
-    // Bypasses the Scheduling Core (no practitioner lock, no checks): the
-    // exclusion constraint is the invariant of last resort.
+    // Bypasses the Scheduling Core (no practitioner lock, no checks, no
+    // retries): the exclusion constraint is the invariant of last resort.
+    // Racing raw inserts can deadlock while checking the constraint; that is
+    // a refusal too. A short deadlock_timeout keeps the race fast (the Core
+    // never deadlocks here: it serialises on the practitioner row first).
     const start = slot(31, "10:00");
-    const results = await Promise.all(
-      patients.map((patientId, i) =>
-        outcome(
-          run(
-            staffCtx(p),
-            (c) =>
-              c.query(
-                `INSERT INTO scheduling.appointments(tenant_id,practice_id,id,patient_id,practitioner_id,location_id,
-                   appointment_type_id,status,starts_at,ends_at,timezone,duration_minutes,buffer_before_minutes,
-                   buffer_after_minutes,occupied,source_channel,booked_by_actor_type,booked_by_actor_id)
-                 VALUES($1,$2,$3,$4,$5,$6,$7,'CONFIRMED',$8,$9,'Africa/Johannesburg',30,0,0,'empty','OTHER','STAFF','user:race')`,
-                [
-                  p.tenantId,
-                  p.practiceId,
-                  randomUUID(),
-                  patientId,
-                  p.practitionerIds[1],
-                  p.locationId,
-                  p.typeId,
-                  // Staggered, all overlapping 10:00-10:30.
-                  new Date(+start + (i % 5) * 60_000),
-                  new Date(+start + (30 + (i % 5)) * 60_000),
-                ],
-              ),
-            pool,
-          ),
-        ),
-      ),
-    );
-    expect(tally(results)).toEqual({ ok: 1, SLOT_UNAVAILABLE: 24 });
+    const raw = new pg.Pool({
+      connectionString: process.env.TEST_DATABASE_URL,
+      max: patients.length,
+    });
+    const insert = async (patientId: string, i: number): Promise<string> => {
+      const c = await raw.connect();
+      try {
+        await c.query("BEGIN");
+        await c.query("SET LOCAL deadlock_timeout = '20ms'");
+        await c.query(
+          `INSERT INTO scheduling.appointments(tenant_id,practice_id,id,patient_id,practitioner_id,location_id,
+             appointment_type_id,status,starts_at,ends_at,timezone,duration_minutes,buffer_before_minutes,
+             buffer_after_minutes,occupied,source_channel,booked_by_actor_type,booked_by_actor_id)
+           VALUES($1,$2,$3,$4,$5,$6,$7,'CONFIRMED',$8,$9,'Africa/Johannesburg',30,0,0,'empty','OTHER','STAFF','user:race')`,
+          [
+            p.tenantId,
+            p.practiceId,
+            randomUUID(),
+            patientId,
+            p.practitionerIds[1],
+            p.locationId,
+            p.typeId,
+            // Staggered, all overlapping 10:00-10:30.
+            new Date(+start + (i % 5) * 60_000),
+            new Date(+start + (30 + (i % 5)) * 60_000),
+          ],
+        );
+        await c.query("COMMIT");
+        return "ok";
+      } catch (e) {
+        await c.query("ROLLBACK").catch(() => undefined);
+        return (e as { code?: string }).code ?? String(e);
+      } finally {
+        c.release();
+      }
+    };
+    try {
+      const results = await Promise.all(patients.map(insert));
+      expect(results.filter((r) => r === "ok")).toHaveLength(1);
+      // exclusion_violation or deadlock_detected: nothing else.
+      expect(
+        results.filter((r) => r !== "ok" && r !== "23P01" && r !== "40P01"),
+      ).toEqual([]);
+      const rows = await occupying(
+        p,
+        p.practitionerIds[1]!,
+        new Date(+start - 3600_000),
+        new Date(+start + 3 * 3600_000),
+      );
+      expect(rows).toHaveLength(1);
+    } finally {
+      await raw.end();
+    }
   });
 
   it("hold vs hold: one of ten concurrent holds wins", async () => {

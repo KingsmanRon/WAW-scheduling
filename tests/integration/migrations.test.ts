@@ -593,4 +593,75 @@ describe.runIf(databaseEnabled)("ledger migrations and legacy backfill", () => {
       await pool.end();
     }
   });
+  it("0011 retires appointment operations: history stays, nothing new is written", async () => {
+    const pool = await scratchDatabase();
+    try {
+      await migrate(pool, { until: "0010_messaging_and_integrations" });
+      const tenant = randomUUID();
+      await pool.query(
+        "INSERT INTO organisations(id,name) VALUES($1,'Legacy org')",
+        [tenant],
+      );
+      // A case left behind by appointment operations v1.
+      const legacy = randomUUID();
+      await pool.query(
+        "INSERT INTO access_cases(id,tenant_id,case_type,source_channel,current_state,opened_at) VALUES($1,$2,'APPOINTMENT_REQUEST','API','RECEIVED',now())",
+        [legacy, tenant],
+      );
+      expect((await migrate(pool)).applied).toEqual([
+        "0011_retire_appointment_operations",
+      ]);
+      const kept = await pool.query(
+        "SELECT case_type,current_state FROM access_cases WHERE id=$1",
+        [legacy],
+      );
+      expect(kept.rows).toEqual([
+        { case_type: "APPOINTMENT_REQUEST", current_state: "RECEIVED" },
+      ]);
+      for (const type of [
+        "APPOINTMENT_REQUEST",
+        "RESCHEDULING_REQUEST",
+        "CANCELLATION_REQUEST",
+      ])
+        await expect(
+          pool.query(
+            "INSERT INTO access_cases(id,tenant_id,case_type,source_channel,current_state,opened_at) VALUES($1,$2,$3,'API','RECEIVED',now())",
+            [randomUUID(), tenant, type],
+          ),
+        ).rejects.toThrow(/access_cases_appointment_operations_retired/);
+      await expect(
+        pool.query(
+          "UPDATE access_cases SET current_state='CLOSED',version=version+1 WHERE id=$1",
+          [legacy],
+        ),
+      ).rejects.toThrow(/access_cases_appointment_operations_retired/);
+      await pool.query(
+        "INSERT INTO access_cases(id,tenant_id,case_type,source_channel,current_state,opened_at) VALUES($1,$2,'REFERRAL','API','RECEIVED',now())",
+        [randomUUID(), tenant],
+      );
+      // The runtime logins can read the retired tables and write none of them.
+      const privileges = await pool.query<{
+        role: string;
+        tbl: string;
+        can_read: boolean;
+        can_write: boolean;
+      }>(
+        `SELECT r.role, t.tbl, has_table_privilege(r.role,t.tbl,'SELECT') AS can_read,
+                has_table_privilege(r.role,t.tbl,'INSERT') OR has_table_privilege(r.role,t.tbl,'UPDATE')
+                  OR has_table_privilege(r.role,t.tbl,'DELETE') OR has_table_privilege(r.role,t.tbl,'TRUNCATE')
+                  OR has_any_column_privilege(r.role,t.tbl,'UPDATE') OR has_any_column_privilege(r.role,t.tbl,'INSERT') AS can_write
+           FROM unnest(ARRAY['access_request','access_worker']) AS r(role)
+          CROSS JOIN unnest(ARRAY['appointment_requests','appointments','appointment_slot_holds']) AS t(tbl)
+          ORDER BY 1,2`,
+      );
+      expect(privileges.rowCount).toBe(6);
+      for (const p of privileges.rows)
+        expect(p, `${p.role}.${p.tbl}`).toMatchObject({
+          can_read: true,
+          can_write: false,
+        });
+    } finally {
+      await pool.end();
+    }
+  });
 });

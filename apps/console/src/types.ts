@@ -24,36 +24,9 @@ export interface Measure<T = number> {
   inputs?: Record<string, unknown>;
 }
 
-export type CaseType =
-  | "REFERRAL"
-  | "APPOINTMENT_REQUEST"
-  | "RESCHEDULING_REQUEST"
-  | "CANCELLATION_REQUEST";
-export type WorkflowStatus =
-  | "AVAILABILITY_REQUESTED"
-  | "AVAILABILITY_RETURNED"
-  | "NO_AVAILABILITY"
-  | "SLOT_SELECTED"
-  | "HOLD_REQUESTED"
-  | "HELD"
-  | "BOOKING_SUBMITTED"
-  | "COMMITTED"
-  | "BOOKED"
-  | "REPLACEMENT_BOOKED"
-  | "ORIGINAL_CANCELLATION_PENDING"
-  | "COMPLETED"
-  | "CANCELLATION_REQUESTED"
-  | "CANCELLATION_SUBMITTED"
-  | "CANCELLED"
-  | "WITHDRAWN";
-
 export interface QueueItem {
   case_id: string;
   display_ref: string;
-  case_type: CaseType;
-  workflow_status: WorkflowStatus | null;
-  origin_referral_case_id: string | null;
-  origin_display_ref: string | null;
   state: CaseState;
   age_seconds: number;
   owner: string | null;
@@ -112,8 +85,6 @@ export interface Execution {
   superseded_at: string | null;
   superseded_reason: string | null;
   created_at: string;
-  /** Pre-authorised, waiting for the previous step to be verified. */
-  planned?: boolean;
 }
 export interface EvidenceEvent {
   sequence: number;
@@ -135,89 +106,10 @@ export interface RuleDecision {
   routing: { destination_queue: string; location?: string | null } | null;
   service?: { code: string } | null;
 }
-/** A slot exactly as the destination offered it; nothing is reserved. */
-export interface Slot {
-  slot_reference: string;
-  provider_reference: string | null;
-  location_reference: string | null;
-  start_at: string;
-  end_at: string;
-  timezone: string;
-  hold_supported: boolean;
-  hold_expires_at: string | null;
-}
-export interface AppointmentView {
-  id: string;
-  source_case_id: string;
-  origin_referral_case_id: string | null;
-  external_reference: string;
-  slot_reference: string;
-  provider_reference: string | null;
-  location_reference: string | null;
-  starts_at: string;
-  ends_at: string;
-  timezone: string;
-  status: "BOOKED" | "CANCELLED" | "SUPERSEDED";
-  committed_at: string;
-  commit_source: string;
-  cancelled_at: string | null;
-  cancellation_source: string | null;
-  replaces_appointment_id: string | null;
-  superseded_by_id: string | null;
-  confirmation_status: "UNCONFIRMED" | "CONFIRMED";
-  confirmed_at: string | null;
-  confirmation_method: string | null;
-  confirmed_by: string | null;
-  version: number;
-}
-export interface AppointmentRequestView {
-  case_type: CaseType;
-  workflow_status: WorkflowStatus;
-  version: number;
-  origin_referral_case_id: string | null;
-  origin_display_ref: string | null;
-  original_appointment_id: string | null;
-  appointment_id: string | null;
-  search: { from: string; to: string; timezone: string } | null;
-  timezone: string;
-  availability: { observed_at: string; fresh: boolean; slots: Slot[] } | null;
-  selected_slot: Slot | null;
-  selected_at: string | null;
-  hold: {
-    id: string;
-    slot_reference: string;
-    status: "ACTIVE" | "CONSUMED" | "RELEASED" | "EXPIRED";
-    created_at: string;
-    expires_at: string;
-    closed_at: string | null;
-  } | null;
-  pending_execution: {
-    id: string;
-    operation: string;
-    status: string;
-    escalated: boolean;
-    superseded: boolean;
-  } | null;
-  cancellation_reason: string | null;
-  last_failure_code: string | null;
-  last_failure_at: string | null;
-  recheck_requested_at: string | null;
-}
-export interface RequestSummary {
-  case_id: string;
-  display_ref: string;
-  case_type: CaseType;
-  state: CaseState | null;
-  workflow_status: WorkflowStatus;
-  original_appointment_id: string | null;
-  appointment_id: string | null;
-  created_at: string;
-}
 export interface CaseView {
   case: {
     id: string;
     display_ref: string;
-    case_type: CaseType;
     source_channel: string;
     current_state: CaseState;
     current_owner: string | null;
@@ -256,13 +148,6 @@ export interface CaseView {
     follow_up_count: number;
   } | null;
   next_action: string;
-  /** Plain-language status of the referral, from authoritative state. */
-  access_status: { status: string; label: string } | null;
-  /** Referral only: may it start automated booking, and if not why. */
-  booking: { eligible: boolean; reasons: string[] } | null;
-  appointment_request: AppointmentRequestView | null;
-  appointment_requests: RequestSummary[];
-  appointments: AppointmentView[];
   interactions: Interaction[];
   observations: Observation[];
   evidence: {
@@ -304,22 +189,6 @@ export interface Cohort {
     median_seconds: number;
     samples: number;
   }[];
-  booking?: BookingMetrics;
-}
-export interface BookingMetrics {
-  ready_to_booked_conversion: Measure;
-  median_ready_to_booked_seconds: Measure;
-  p95_ready_to_booked_seconds: Measure;
-  booking_requests: Measure;
-  booked_by_access: Measure;
-  booking_attempts_per_booked: Measure;
-  availability_searches_per_booked: Measure;
-  selection_to_booking_success: Measure;
-  abandoned_booking_requests: Measure;
-  reschedules_completed: Measure;
-  cancellations_completed: Measure;
-  ambiguous_appointment_writes: Measure;
-  interventions_per_booking_request: Measure;
 }
 
 export interface RuleDefinition {

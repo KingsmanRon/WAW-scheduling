@@ -29,6 +29,7 @@ describe("migration discovery", () => {
       "0008_practice_directory",
       "0009_scheduling_core",
       "0010_messaging_and_integrations",
+      "0011_retire_appointment_operations",
     ]);
     for (const f of files) expect(f.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

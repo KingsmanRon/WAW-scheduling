@@ -7,9 +7,7 @@ provider's existing systems:
 ```text
 referral received → patient resolved → information completed → administrative
 readiness determined → destination updated → ready for booking → appointment
-booked (by staff, or by ACCESS through the destination: availability → slot
-chosen by staff → hold → commit → read back) or referral deliberately closed →
-business outcome measured
+booked or referral deliberately closed → business outcome measured
 ```
 
 ACCESS makes **deterministic administrative decisions only** (identity
@@ -20,23 +18,23 @@ that looks urgent or clinical is routed to a human safety workflow.
 
 ## Status
 
-| Capability                                                                            | Implemented           | Client-pilot ready                             | Production ready                     |
-| ------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------- | ------------------------------------ |
-| `access_case` aggregate (REFERRAL + 3 appointment types; 2 more defined, fail closed) | yes                   | yes                                            | yes                                  |
-| Case lifecycle through booking or deliberate closure, resolution codes                | yes                   | yes                                            | yes                                  |
-| Append-only interactions, outcome observations, effort events                         | yes                   | yes                                            | yes                                  |
-| Versioned, immutable administrative rule sets + deterministic evaluator               | yes                   | yes                                            | yes                                  |
-| Business measurement with provenance (case and cohort)                                | yes                   | yes                                            | yes                                  |
-| Workforce auth: Supabase JWT + membership-derived tenant and role                     | yes                   | yes (after IdP setup)                          | needs pen test                       |
-| PostgreSQL RLS, least-privilege runtime roles, ledger migrations                      | yes                   | yes                                            | yes                                  |
-| Managed private artifact storage (Supabase Storage + app-layer AES-GCM)               | yes                   | yes (after bucket provisioning)                | needs key rotation                   |
-| Malware scanning (ClamAV INSTREAM sidecar), fail closed                               | yes                   | yes (after clamd deployment)                   | needs signature monitoring           |
-| Manual destination workflow (staff enters referral in the PMS)                        | yes                   | **yes — the pilot destination path**           | yes                                  |
-| Automated destination connector                                                       | mock only             | **no** (no real PMS connector qualified)       | no                                   |
-| Closed-loop outcome readback                                                          | port + mock           | staff/import only                              | needs a qualified connector          |
-| Staff console: queue, case detail, actions, booking stage, dashboard, rules           | yes                   | yes                                            | needs usability/accessibility review |
-| Email / WhatsApp / voice / patient portal channels                                    | defined, disabled     | no                                             | future                               |
-| Appointment operations ([design](docs/appointment-operations-v1.md))                  | mock destination only | **no** (no real PMS connector; manual booking) | no                                   |
+| Capability                                                                     | Implemented       | Client-pilot ready                       | Production ready                     |
+| ------------------------------------------------------------------------------ | ----------------- | ---------------------------------------- | ------------------------------------ |
+| `access_case` aggregate (REFERRAL; five other case types defined, fail closed) | yes               | yes                                      | yes                                  |
+| Case lifecycle through booking or deliberate closure, resolution codes         | yes               | yes                                      | yes                                  |
+| Append-only interactions, outcome observations, effort events                  | yes               | yes                                      | yes                                  |
+| Versioned, immutable administrative rule sets + deterministic evaluator        | yes               | yes                                      | yes                                  |
+| Business measurement with provenance (case and cohort)                         | yes               | yes                                      | yes                                  |
+| Workforce auth: Supabase JWT + membership-derived tenant and role              | yes               | yes (after IdP setup)                    | needs pen test                       |
+| PostgreSQL RLS, least-privilege runtime roles, ledger migrations               | yes               | yes                                      | yes                                  |
+| Managed private artifact storage (Supabase Storage + app-layer AES-GCM)        | yes               | yes (after bucket provisioning)          | needs key rotation                   |
+| Malware scanning (ClamAV INSTREAM sidecar), fail closed                        | yes               | yes (after clamd deployment)             | needs signature monitoring           |
+| Manual destination workflow (staff enters referral in the PMS)                 | yes               | **yes — the pilot destination path**     | yes                                  |
+| Automated destination connector                                                | mock only         | **no** (no real PMS connector qualified) | no                                   |
+| Closed-loop outcome readback                                                   | port + mock       | staff/import only                        | needs a qualified connector          |
+| Staff console: queue, case detail, actions, dashboard, rules                   | yes               | yes                                      | needs usability/accessibility review |
+| Email / WhatsApp / voice / patient portal channels                             | defined, disabled | no                                       | future                               |
+| Appointment scheduling, rescheduling, cancellation cases                       | defined, disabled | no                                       | future                               |
 
 "Client-pilot ready" still requires every gate in
 [docs/client-pilot-checklist.md](docs/client-pilot-checklist.md) before any
@@ -47,12 +45,10 @@ identifiable patient data is used. **Until then: synthetic data only.**
 TypeScript modular monolith over PostgreSQL (Supabase).
 
 - `apps/core-api` — Fastify API: intake, interactions, staff actions, outcome
-  import, appointment commands (booking steps, confirm, reschedule, cancel),
-  queue/case/metrics queries, rule-set and membership administration. JWT
-  auth, artifact storage port, scanner port, extraction port.
+  import, queue/case/metrics queries, rule-set and membership administration.
+  JWT auth, artifact storage port, scanner port, extraction port.
 - `apps/worker` — leased, case-ordered outbox dispatcher; ambiguous-write
-  reconciler; appointment settlement (the same dispatcher); outcome readback
-  poller; follow-up/escalation and hold-expiry timers.
+  reconciler; outcome readback poller; follow-up/escalation timers.
 - `apps/console` — React/Vite staff console (Supabase sign-in).
 - `packages/contracts` — versioned schemas and the platform vocabulary.
 - `packages/domain` — case state machine and outcome-observation planning.
@@ -61,7 +57,7 @@ TypeScript modular monolith over PostgreSQL (Supabase).
 - `packages/db` — case engine, evidence chain, command idempotency, metrics,
   ledger migration runner, seeding/bootstrap.
 - `packages/config` — fail-closed startup configuration per profile.
-- `supabase/migrations` — `0001`–`0006` (additive; applied by the ledger runner).
+- `supabase/migrations` — `0001`–`0005` (additive; applied by the ledger runner).
 
 Read next: [ADR 0002 — case aggregate](docs/adr/0002-access-case-aggregate.md),
 [ADR 0003 — execution, identity and storage](docs/adr/0003-execution-identity-storage.md),
@@ -69,8 +65,7 @@ Read next: [ADR 0002 — case aggregate](docs/adr/0002-access-case-aggregate.md)
 [security](docs/security.md), [deployment](docs/deployment.md),
 [runbooks](docs/runbooks.md), [rules guide](docs/rules-guide.md),
 [connector qualification](docs/connector-qualification.md),
-[synthetic qualification](docs/qualification.md),
-[appointment operations v1](docs/appointment-operations-v1.md).
+[synthetic qualification](docs/qualification.md).
 
 ## Local development (synthetic data)
 
@@ -97,10 +92,7 @@ npm -w @access/worker run dev
 Synthetic organisation `11111111-…` uses the (mock) connector destination;
 `22222222-…` uses the manual destination workflow. In the console choose a
 role and use the synthetic fixtures (`complete`, `missing-insurance`,
-`ambiguous-identity`, `urgent`) or the structured intake form. A referral that
-reaches Ready for booking can be booked from its page (Start booking); the
-mock destination offers deterministic weekday slots and keeps its synthetic
-appointments in the worker's memory, so restarting the worker forgets them.
+`ambiguous-identity`, `urgent`) or the structured intake form.
 
 ## Checks
 
@@ -109,7 +101,6 @@ npm run format && npm run lint && npm run typecheck
 npm run test:unit
 TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/access_test npm run test:integration
 npm run qualify:synthetic          # Flows A-I; set QUALIFICATION_REPORT=report.json
-npm run qualify:appointments       # Scenarios A-S; set APPOINTMENT_QUALIFICATION_REPORT=report.json
 npm run build && npm run validate:infra && npm run check:secrets
 ```
 

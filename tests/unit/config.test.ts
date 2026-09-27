@@ -257,11 +257,6 @@ describe("worker startup configuration", () => {
       "patient.lookup",
       "referral.create",
       "referral.status.read",
-      "appointment.availability.read",
-      "appointment.hold",
-      "appointment.create",
-      "appointment.reschedule",
-      "appointment.cancel",
       "appointment.status.read",
     ]));
   it("never accepts the migration credential", () =>

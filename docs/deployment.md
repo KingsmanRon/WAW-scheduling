@@ -85,17 +85,7 @@ in those files. Railway is not a supported target for real patient data.
 **Breaking change for the existing Railway staging:** set
 `ACCESS_DEPLOYMENT_PROFILE=synthetic-staging` on both services (required when
 `NODE_ENV=production`), `CONNECTOR_KIND=mock` on the worker, and run the
-migration once with the owner URL to apply `0003`–`0006`.
-
-**Appointment operations (0006):** run the migration before deploying the new
-API and worker. No new variable or secret. `CONNECTOR_CAPABILITIES` empty
-means every capability the connector implements; if it is set explicitly,
-automated booking needs `appointment.availability.read`, `appointment.create`
-and `appointment.status.read` (read-back is required: a booking counts only
-once read back), plus `appointment.hold`, `appointment.reschedule` and
-`appointment.cancel` for holds, rescheduling and cancellation. With
-`CONNECTOR_KIND=none` every booking step fails closed into a staff exception,
-and booking stays manual (`record_booking`).
+migration once with the owner URL to apply `0003`–`0005`.
 
 ## Local
 

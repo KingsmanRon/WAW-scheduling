@@ -46,7 +46,6 @@
 }
 .case-bar__ref {
   font-weight: 650;
-  white-space: nowrap;
 }
 .case-bar__action {
   min-width: 0;

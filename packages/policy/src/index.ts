@@ -22,12 +22,7 @@ export type Permission =
   | "metrics.read"
   | "rule_set.read"
   | "rule_set.write"
-  | "membership.manage"
-  // Appointment operations. Each case type's steps need its permission.
-  | "appointment.book"
-  | "appointment.confirm"
-  | "appointment.reschedule"
-  | "appointment.cancel";
+  | "membership.manage";
 
 const coordinator: readonly Permission[] = [
   "case.read",
@@ -45,22 +40,13 @@ const coordinator: readonly Permission[] = [
   "case.action.record_provider_declined",
   "case.action.close",
   "case.action.reject",
-  "case.action.start_booking",
-  "appointment.book",
-  "appointment.confirm",
   "metrics.read",
   "rule_set.read",
 ];
-/**
- * Rescheduling and cancellation remove a committed appointment from the
- * destination, so they sit with the manager role (as outcome corrections do).
- */
 const manager: readonly Permission[] = [
   ...coordinator,
   "case.action.correct_outcome",
   "observation.import",
-  "appointment.reschedule",
-  "appointment.cancel",
 ];
 const matrix: Record<StaffRole, readonly Permission[]> = {
   READ_ONLY: ["case.read", "metrics.read", "rule_set.read"],
@@ -124,78 +110,6 @@ export function authorizeOperation(
     allowed: true,
     capability: spec.capability,
     consequential: spec.consequential,
-  };
-}
-
-/** Permission needed for the steps of an appointment operations case. */
-export function appointmentPermission(
-  caseType: string,
-): "appointment.book" | "appointment.reschedule" | "appointment.cancel" {
-  switch (caseType) {
-    case "APPOINTMENT_REQUEST":
-      return "appointment.book";
-    case "RESCHEDULING_REQUEST":
-      return "appointment.reschedule";
-    case "CANCELLATION_REQUEST":
-      return "appointment.cancel";
-    default:
-      throw new CaseTypeDisabledError(caseType);
-  }
-}
-
-export class CaseTypeNotCreatableError extends Error {
-  readonly statusCode = 422;
-  readonly code = "CASE_TYPE_NOT_CREATABLE";
-  constructor(caseType: string) {
-    super(
-      caseType === "APPOINTMENT_REQUEST"
-        ? "an appointment request starts from a referral that is ready for booking"
-        : `a ${caseType} starts from a committed appointment`,
-    );
-  }
-}
-/**
- * Only referrals are created directly. Appointment operations cases start
- * from an eligible referral or a committed appointment.
- */
-export function assertDirectlyCreatable(caseType: string): void {
-  assertCaseTypeEnabled(caseType);
-  if (caseType !== "REFERRAL") throw new CaseTypeNotCreatableError(caseType);
-}
-
-export type AppointmentDecision = {
-  effect: "ALLOW" | "DENY";
-  policyVersion: "appointment-policy.v1";
-  operation: string;
-  reason: string;
-};
-/**
- * Policy for an appointment operation, evaluated (and recorded in evidence)
- * before its outbox row is written: the case type must be enabled and bound
- * to the operation, and the administrative preconditions must hold.
- */
-export function evaluateAppointmentOperation(input: {
-  caseType: string;
-  operation: string;
-  ready: boolean;
-  reason?: string;
-}): AppointmentDecision {
-  const op = authorizeOperation(input.caseType, input.operation);
-  const base = {
-    policyVersion: "appointment-policy.v1" as const,
-    operation: input.operation,
-  };
-  if (!op.allowed) return { ...base, effect: "DENY", reason: op.code };
-  if (!input.ready)
-    return {
-      ...base,
-      effect: "DENY",
-      reason: input.reason ?? "preconditions unmet",
-    };
-  return {
-    ...base,
-    effect: "ALLOW",
-    reason: "administrative appointment operation permitted",
   };
 }
 

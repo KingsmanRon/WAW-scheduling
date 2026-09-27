@@ -9,7 +9,6 @@ import "./styles/shell.css";
 import "./styles/login.css";
 import "./styles/queue.css";
 import "./styles/case.css";
-import "./styles/booking.css";
 import "./styles/dashboard.css";
 import "./styles/intake.css";
 import "./styles/rules.css";
