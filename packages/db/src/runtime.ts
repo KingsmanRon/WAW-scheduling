@@ -1,6 +1,6 @@
 import pg from "pg";
 import { readFileSync } from "node:fs";
-import type { StaffRole } from "@access/contracts";
+import type { PracticeRole, StaffRole } from "@access/contracts";
 import { APPLICATION_SCHEMAS } from "./schema-security.js";
 
 /** Error with an HTTP status and a stable, non-sensitive code. */
@@ -91,7 +91,9 @@ export async function verifyRuntimeIdentity(
 
 export interface RequestContext {
   userId?: string | undefined;
-  actorRole?: StaffRole | null | undefined;
+  actorRole?: StaffRole | PracticeRole | null | undefined;
+  /** Binds the transaction to one practice (restrictive RLS for the API role). */
+  practiceId?: string | undefined;
 }
 /**
  * Run `fn` in a transaction whose tenant (and, for staff requests, user and
@@ -108,8 +110,13 @@ export async function tenantTx<T>(
   try {
     await c.query("BEGIN");
     await c.query(
-      "SELECT set_config('app.tenant_id',$1,true), set_config('app.user_id',$2,true), set_config('app.actor_role',$3,true)",
-      [tenantId, context.userId ?? "", context.actorRole ?? ""],
+      "SELECT set_config('app.tenant_id',$1,true), set_config('app.user_id',$2,true), set_config('app.actor_role',$3,true), set_config('app.practice_id',$4,true)",
+      [
+        tenantId,
+        context.userId ?? "",
+        context.actorRole ?? "",
+        context.practiceId ?? "",
+      ],
     );
     const value = await fn(c);
     await c.query("COMMIT");
@@ -139,5 +146,44 @@ export async function userTx<T>(
     throw e;
   } finally {
     c.release();
+  }
+}
+
+/** PostgreSQL deadlock and serialization failures: safe to retry whole. */
+export function isRetryableTransactionError(e: unknown): boolean {
+  const code = (e as { code?: unknown })?.code;
+  return code === "40P01" || code === "40001";
+}
+/**
+ * A practice-scoped transaction (tenant, practice, user and role bound for
+ * RLS) retried when PostgreSQL aborts it for a deadlock or serialization
+ * failure. `fn` must perform no effect outside the database: external work
+ * goes through the outbox.
+ */
+export async function practiceTx<T>(
+  scope: {
+    tenantId: string;
+    practiceId: string;
+    userId?: string | undefined;
+    actorRole?: StaffRole | PracticeRole | null | undefined;
+  },
+  fn: (c: DbClient) => Promise<T>,
+  db: pg.Pool,
+  attempts = 3,
+): Promise<T> {
+  if (!scope.practiceId) throw new Error("practice context required");
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await tenantTx(scope.tenantId, fn, db, {
+        userId: scope.userId,
+        actorRole: scope.actorRole,
+        practiceId: scope.practiceId,
+      });
+    } catch (e) {
+      if (attempt >= attempts || !isRetryableTransactionError(e)) throw e;
+      await new Promise((r) =>
+        setTimeout(r, 10 * attempt + Math.random() * 20),
+      );
+    }
   }
 }

@@ -16,6 +16,7 @@ export default defineConfig({
       "@access/observability": src("observability"),
       "@access/db": src("db"),
       "@access/scheduling": src("scheduling"),
+      "@access/patients": src("patients"),
     },
   },
   test: {
@@ -36,7 +37,11 @@ export default defineConfig({
         test: {
           name: "integration",
           setupFiles: ["tests/support/quiet-logs.ts"],
-          include: ["tests/integration/**/*.test.ts", "tests/e2e/**/*.test.ts"],
+          include: [
+            "tests/integration/**/*.test.ts",
+            "tests/concurrency/**/*.test.ts",
+            "tests/e2e/**/*.test.ts",
+          ],
           globalSetup: ["tests/support/global-setup.ts"],
           testTimeout: 30_000,
           hookTimeout: 120_000,

@@ -48,6 +48,8 @@ export const SCHEDULING_ERRORS = {
     "This appointment can no longer be changed through this channel; please contact the practice.",
   ],
   // Configuration and eligibility.
+  PRACTICE_NOT_FOUND: [404, "The practice was not found."],
+  PRACTICE_SUSPENDED: [403, "The practice is suspended."],
   APPOINTMENT_TYPE_NOT_FOUND: [404, "The appointment type was not found."],
   APPOINTMENT_TYPE_INACTIVE: [422, "The appointment type is not active."],
   PRACTITIONER_NOT_FOUND: [404, "The practitioner was not found."],
@@ -67,6 +69,19 @@ export const SCHEDULING_ERRORS = {
     "This appointment cannot be booked through this channel.",
   ],
   PATIENT_NOT_FOUND: [404, "The patient was not found."],
+  PATIENT_IDENTIFIER_EXISTS: [
+    409,
+    "Another patient in this practice already has this identifier.",
+  ],
+  PATIENT_INVALID: [422, "Given and family names are required."],
+  SEARCH_CRITERIA_REQUIRED: [
+    400,
+    "Search by name, phone number, e-mail, patient number or identifier.",
+  ],
+  CONTACT_INVALID: [422, "The phone number or e-mail address is not valid."],
+  IDENTIFIER_INVALID: [422, "The identifier is not valid."],
+  CONTACT_NOT_FOUND: [404, "The contact detail was not found."],
+  DUPLICATE_REVIEW_NOT_FOUND: [404, "The duplicate review was not found."],
   PATIENT_INACTIVE: [422, "The patient record is archived."],
   NEW_PATIENT_NOT_ALLOWED: [
     422,
@@ -102,6 +117,9 @@ export const SCHEDULING_ERRORS = {
     "The patient is already on the waitlist for this appointment type.",
   ],
   // Schedule configuration.
+  INVALID_TIMEZONE: [422, "The time zone is not a valid IANA time zone."],
+  INVALID_PERIOD: [422, "The period must end after it starts."],
+  CONFIGURATION_NOT_FOUND: [404, "The schedule entry was not found."],
   SCHEDULE_BLOCK_CONFLICT: [
     409,
     "The block overlaps booked appointments. Reschedule them first or confirm the conflict.",

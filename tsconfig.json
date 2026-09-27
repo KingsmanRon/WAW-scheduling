@@ -26,6 +26,9 @@
       "path": "packages/scheduling"
     },
     {
+      "path": "packages/patients"
+    },
+    {
       "path": "apps/core-api"
     },
     {

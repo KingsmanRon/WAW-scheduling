@@ -1266,3 +1266,5 @@ export function canonicalJson(value: unknown): string {
     .map((k) => `${JSON.stringify(k)}:${canonicalJson(object[k])}`)
     .join(",")}}`;
 }
+
+export * from "./scheduling.js";

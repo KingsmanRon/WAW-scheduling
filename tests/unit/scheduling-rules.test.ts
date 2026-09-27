@@ -16,6 +16,7 @@ import {
   localMinuteOf,
   wallClockToInstant,
   type EligibilityInput,
+  type ReferralFacts,
 } from "../../packages/scheduling/src/index.js";
 
 const code = (fn: () => void): string | undefined => {
@@ -160,9 +161,9 @@ describe("booking eligibility", () => {
     referralVerificationRequired: true,
     ...over,
   });
-  const referral = {
+  const referral: ReferralFacts = {
     patientMatches: true,
-    status: "VERIFIED" as const,
+    status: "VERIFIED",
     appointmentTypeMatches: null,
     validUntil: "2026-12-31",
     maxAppointments: null,
@@ -297,7 +298,7 @@ describe("booking eligibility", () => {
         assertBookingEligibility(eligible({ appointmentType: needs })),
       ),
     ).toBe("REFERRAL_REQUIRED");
-    const withReferral = (r: Partial<typeof referral>, verification = true) =>
+    const withReferral = (r: Partial<ReferralFacts>, verification = true) =>
       code(() =>
         assertBookingEligibility(
           eligible({
