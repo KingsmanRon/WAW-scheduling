@@ -239,7 +239,10 @@ describe.runIf(databaseEnabled)(
        VALUES($1,$2,$3,'RECEPTIONIST','ACTIVE','Browser user','test','test')`,
         [a.tenantId, a.practiceId, member],
       );
-      const asBrowser = async (role: "authenticated" | "anon", sql: string) => {
+      const asBrowser = async (
+        role: "authenticated" | "anon" | "service_role",
+        sql: string,
+      ) => {
         const c = await ownerPool().connect();
         try {
           await c.query("BEGIN");
@@ -278,6 +281,18 @@ describe.runIf(databaseEnabled)(
       expect(
         await asBrowser("anon", "SELECT * FROM scheduling.schedule_signals"),
       ).toMatch(/permission denied/);
+      // Supabase serves public through its Data API to anyone holding the
+      // anon key. The tenant catalogue and the migration ledger carry no
+      // row-level security; they, and every workspace table, are closed to
+      // all of Supabase's roles.
+      for (const role of ["anon", "authenticated", "service_role"] as const)
+        for (const sql of [
+          "SELECT * FROM public.organisations",
+          "UPDATE public.organisations SET name = 'x'",
+          "DELETE FROM public.schema_migrations",
+          "SELECT * FROM public.access_cases",
+        ])
+          expect(await asBrowser(role, sql)).toMatch(/permission denied/);
       const publication = await ownerPool().query(
         "SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname='supabase_realtime'",
       );

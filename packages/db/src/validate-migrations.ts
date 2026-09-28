@@ -1,21 +1,23 @@
 import pg from "pg";
 import { migrate } from "./migrations.js";
 import { verifySchemaSecurity } from "./schema-security.js";
+import { simulateSupabase } from "./supabase-simulation.js";
 
 /**
  * Migration validation from a clean environment (CI and pre-release):
  *
  *   VALIDATION_DATABASE_URL=postgres://owner:pw@host:5432/postgres npm run db:validate
  *
- * Creates a throwaway database (optionally with Supabase's browser roles and
- * Realtime publication, to exercise the Supabase-only branches), applies
+ * Creates a throwaway database (by default standing in for a Supabase
+ * project: its browser roles, their default grants in `public` and the
+ * Realtime publication, so the Supabase-only branches run), applies
  * every migration, applies them again to prove the runner is a no-op on an
  * up-to-date schema, verifies the security invariants of every application
  * table, and drops the database. Never touches an existing database.
  */
 const adminUrl = process.env.VALIDATION_DATABASE_URL;
 if (!adminUrl) throw new Error("VALIDATION_DATABASE_URL required");
-const simulateSupabase = process.env.VALIDATION_SUPABASE_ROLES !== "false";
+const supabase = process.env.VALIDATION_SUPABASE_ROLES !== "false";
 const name = `access_validate_${Date.now()}_${process.pid}`;
 const admin = new pg.Pool({ connectionString: adminUrl, max: 1 });
 const target = new URL(adminUrl);
@@ -25,14 +27,7 @@ try {
   await admin.query(`CREATE DATABASE ${name}`);
   const pool = new pg.Pool({ connectionString: target.toString(), max: 2 });
   try {
-    if (simulateSupabase)
-      await pool.query(`
-        DO $$ BEGIN
-          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
-          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
-          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
-        END $$;
-        CREATE PUBLICATION supabase_realtime;`);
+    if (supabase) await simulateSupabase(pool);
     const first = await migrate(pool, { log: (m) => console.log(m) });
     const second = await migrate(pool);
     if (second.applied.length)
@@ -48,7 +43,7 @@ try {
       JSON.stringify({
         database: name,
         applied: first.applied.length,
-        supabase_roles_simulated: simulateSupabase,
+        supabase_roles_simulated: supabase,
         result: "valid",
       }),
     );

@@ -32,6 +32,7 @@ describe("migration discovery", () => {
       "0011_retire_appointment_operations",
       "0012_notification_worker",
       "0013_channel_access_layer",
+      "0014_close_public_schema_to_browser_roles",
     ]);
     for (const f of files) expect(f.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

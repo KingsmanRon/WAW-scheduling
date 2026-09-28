@@ -1,5 +1,6 @@
 import pg from "pg";
 import { migrate, seedSynthetic } from "../../packages/db/src/index.js";
+import { simulateSupabase } from "../../packages/db/src/supabase-simulation.js";
 
 /**
  * Real PostgreSQL for integration behaviour. In CI a missing database is a
@@ -29,7 +30,8 @@ export default async function setup() {
       `DROP SCHEMA IF EXISTS platform, directory, scheduling, messaging, integration CASCADE;
        DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT USAGE ON SCHEMA public TO PUBLIC;`,
     );
-    await simulateSupabaseRoles(pool);
+    // Supabase's browser roles, their default grants and Realtime.
+    await simulateSupabase(pool);
     await migrate(pool);
     await pool.query(
       "ALTER ROLE access_request LOGIN PASSWORD 'integration-api'; ALTER ROLE access_worker LOGIN PASSWORD 'integration-worker';",
@@ -38,21 +40,4 @@ export default async function setup() {
   } finally {
     await pool.end();
   }
-}
-
-/**
- * Supabase provides the browser roles (anon, authenticated, service_role)
- * and the Realtime publication. Creating them here makes the migrations take
- * their Supabase branches, so the browser-facing grants and policies are
- * exercised by the suites exactly as they will run on Supabase.
- */
-export async function simulateSupabaseRoles(pool: pg.Pool): Promise<void> {
-  await pool.query(`
-    DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
-    END $$;
-    DROP PUBLICATION IF EXISTS supabase_realtime;
-    CREATE PUBLICATION supabase_realtime;`);
 }

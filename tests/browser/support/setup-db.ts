@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import { DateTime } from "luxon";
 import { provisionWhatsApp } from "@access/access";
 import { bootstrapPractice, migrate } from "@access/db";
+import { simulateSupabase } from "../../../packages/db/src/supabase-simulation.js";
 import { setNotificationPreferences } from "@access/notifications";
 import { IdentifierHasher, createPatient } from "@access/patients";
 import {
@@ -80,15 +81,8 @@ async function main() {
       `DROP SCHEMA IF EXISTS platform, directory, scheduling, messaging, integration CASCADE;
        DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT USAGE ON SCHEMA public TO PUBLIC;`,
     );
-    // Supabase's browser roles and Realtime publication, as in the vitest setup.
-    await owner.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
-      END $$;
-      DROP PUBLICATION IF EXISTS supabase_realtime;
-      CREATE PUBLICATION supabase_realtime;`);
+    // Supabase's browser roles, their grants and Realtime, as in the vitest setup.
+    await simulateSupabase(owner);
     await migrate(owner);
     await owner.query(
       "ALTER ROLE access_request LOGIN PASSWORD 'integration-api'; ALTER ROLE access_worker LOGIN PASSWORD 'integration-worker';",

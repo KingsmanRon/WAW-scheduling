@@ -102,7 +102,6 @@ export async function verifySchemaSecurity(db: pg.Pool): Promise<string[]> {
         AND has_table_privilege(r.oid, c.oid, p.privilege)`,
     [schemas],
   );
-  const newSchemas = new Set<string>(schemas.filter((s) => s !== "public"));
   for (const p of privileges.rows) {
     const runtime = p.role === "access_request" || p.role === "access_worker";
     if (runtime) {
@@ -115,12 +114,22 @@ export async function verifySchemaSecurity(db: pg.Pool): Promise<string[]> {
         problems.push(`${p.role} may DELETE ${p.name}`);
       if (p.privilege === "REFERENCES" || p.privilege === "TRIGGER")
         problems.push(`${p.role} holds ${p.privilege} on ${p.name}`);
-    } else if (
-      newSchemas.has(p.name.split(".")[0]!) &&
-      !BROWSER_ALLOWED.has(`${p.role}.${p.name}:${p.privilege}`)
-    )
+    } else if (!BROWSER_ALLOWED.has(`${p.role}.${p.name}:${p.privilege}`))
+      // Supabase exposes public through its Data API with the public anon
+      // key: a grant there is reachable from any browser.
       problems.push(`browser role ${p.role} holds ${p.privilege} on ${p.name}`);
   }
+  const sequences = await db.query<{ role: string; name: string }>(
+    `SELECT r.rolname AS role, n.nspname || '.' || c.relname AS name
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       CROSS JOIN pg_roles r
+      WHERE n.nspname = ANY($1) AND c.relkind = 'S'
+        AND r.rolname IN ('anon','authenticated','service_role')
+        AND (has_sequence_privilege(r.oid, c.oid, 'USAGE') OR has_sequence_privilege(r.oid, c.oid, 'UPDATE'))`,
+    [schemas],
+  );
+  for (const q of sequences.rows)
+    problems.push(`browser role ${q.role} may use sequence ${q.name}`);
   const definers = await db.query<{ name: string; config: string[] | null }>(
     `SELECT n.nspname || '.' || p.proname AS name, p.proconfig AS config
        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
