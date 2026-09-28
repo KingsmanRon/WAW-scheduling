@@ -593,8 +593,9 @@ function BlockDialog({
           <div className="note">
             <p>
               {conflicts.length} booked appointment
-              {conflicts.length === 1 ? "" : "s"} fall in this time. Blocking
-              keeps them booked; move or cancel them separately if needed.
+              {conflicts.length === 1 ? " falls" : "s fall"} in this time.
+              Blocking keeps them booked; move or cancel them separately if
+              needed.
             </p>
             <ul className="small">
               {conflicts.map((c) => (

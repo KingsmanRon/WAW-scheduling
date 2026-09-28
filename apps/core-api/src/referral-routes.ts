@@ -32,6 +32,7 @@ import { decodeArtifact } from "./service.js";
 import type { ArtifactScanner } from "./scanner.js";
 import type { ArtifactStore } from "./storage.js";
 import {
+  DOCUMENT_BODY_LIMIT,
   createPracticeKit,
   idParam,
   requestMeta,
@@ -289,98 +290,106 @@ export async function registerReferralRoutes(
     return deps.documents;
   };
 
-  app.post(`${base}/:referralId/documents`, async (req, reply) => {
-    const auth = await authorize(req, "referral.register");
-    const referralId = idParam(req, "referralId");
-    const body = referralDocumentSchema.parse(req.body);
-    const docs = documents();
-    const bytes = decodeArtifact(body.content_base64);
-    if (bytes.length > 10 * 1024 * 1024)
-      throw new AppError(400, "ARTIFACT_SIZE", "documents are at most 10 MiB");
-    assertMediaType(bytes, body.media_type);
-    const ctx = context(req, auth);
-    // The fingerprint names the content by digest: a retry of the same
-    // upload replays; the same key with other content is refused.
-    const material = {
-      referralId,
-      document_type: body.document_type,
-      media_type: body.media_type,
-      sha256: createHash("sha256").update(bytes).digest("hex"),
-    };
-    return mutate(
-      req,
-      reply,
-      auth,
-      "referral.document.upload",
-      material,
-      ctx,
-      async (c) => {
-        // Nothing is scanned or stored for a referral that cannot take it.
-        const referral = await getReferral(c, ctx, referralId);
-        if (referral.status !== "RECEIVED" && referral.status !== "VERIFIED")
-          throw new AppError(
-            409,
-            "REFERRAL_CLOSED",
-            "documents can only be added to an open referral",
-          );
-        const scan = await docs.scanner.scan(bytes);
-        if (scan.status === "REJECTED")
-          throw new AppError(
-            422,
-            "DOCUMENT_REJECTED",
-            "the file failed malware scanning and was not stored",
-          );
-        if (scan.status !== "CLEAN")
-          throw new AppError(
-            503,
-            "SCANNER_UNAVAILABLE",
-            "the file could not be scanned; try again later",
-          );
-        const stored = await docs.store.put({
-          tenantId: ctx.tenantId,
-          caseId: referralId,
-          bytes,
-          contentType: body.media_type,
-        });
-        try {
-          const doc = await recordReferralDocument(c, ctx, referralId, {
-            documentType: body.document_type,
-            mediaType: body.media_type,
-            sizeBytes: stored.size,
-            digestSha256: stored.digest,
-            storageBackend: stored.backend,
-            objectKey: stored.objectKey,
-            encryptionKeyId: stored.keyId,
-            scanner: scan.scanner,
-            scannedAt: new Date(),
-            retentionUntil: new Date(
-              Date.now() + docs.retentionDays * 24 * 3600_000,
-            ),
+  app.post(
+    `${base}/:referralId/documents`,
+    { bodyLimit: DOCUMENT_BODY_LIMIT },
+    async (req, reply) => {
+      const auth = await authorize(req, "referral.register");
+      const referralId = idParam(req, "referralId");
+      const body = referralDocumentSchema.parse(req.body);
+      const docs = documents();
+      const bytes = decodeArtifact(body.content_base64);
+      if (bytes.length > 10 * 1024 * 1024)
+        throw new AppError(
+          400,
+          "ARTIFACT_SIZE",
+          "documents are at most 10 MiB",
+        );
+      assertMediaType(bytes, body.media_type);
+      const ctx = context(req, auth);
+      // The fingerprint names the content by digest: a retry of the same
+      // upload replays; the same key with other content is refused.
+      const material = {
+        referralId,
+        document_type: body.document_type,
+        media_type: body.media_type,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      };
+      return mutate(
+        req,
+        reply,
+        auth,
+        "referral.document.upload",
+        material,
+        ctx,
+        async (c) => {
+          // Nothing is scanned or stored for a referral that cannot take it.
+          const referral = await getReferral(c, ctx, referralId);
+          if (referral.status !== "RECEIVED" && referral.status !== "VERIFIED")
+            throw new AppError(
+              409,
+              "REFERRAL_CLOSED",
+              "documents can only be added to an open referral",
+            );
+          const scan = await docs.scanner.scan(bytes);
+          if (scan.status === "REJECTED")
+            throw new AppError(
+              422,
+              "DOCUMENT_REJECTED",
+              "the file failed malware scanning and was not stored",
+            );
+          if (scan.status !== "CLEAN")
+            throw new AppError(
+              503,
+              "SCANNER_UNAVAILABLE",
+              "the file could not be scanned; try again later",
+            );
+          const stored = await docs.store.put({
+            tenantId: ctx.tenantId,
+            caseId: referralId,
+            bytes,
+            contentType: body.media_type,
           });
-          if (!doc.created)
-            await docs.store.remove(stored.objectKey).catch(() => undefined);
-          return {
-            status: doc.created ? 201 : 200,
-            body: {
-              document: {
-                id: doc.id,
-                referral_id: referralId,
-                document_type: body.document_type,
-                media_type: body.media_type,
-                size_bytes: stored.size,
+          try {
+            const doc = await recordReferralDocument(c, ctx, referralId, {
+              documentType: body.document_type,
+              mediaType: body.media_type,
+              sizeBytes: stored.size,
+              digestSha256: stored.digest,
+              storageBackend: stored.backend,
+              objectKey: stored.objectKey,
+              encryptionKeyId: stored.keyId,
+              scanner: scan.scanner,
+              scannedAt: new Date(),
+              retentionUntil: new Date(
+                Date.now() + docs.retentionDays * 24 * 3600_000,
+              ),
+            });
+            if (!doc.created)
+              await docs.store.remove(stored.objectKey).catch(() => undefined);
+            return {
+              status: doc.created ? 201 : 200,
+              body: {
+                document: {
+                  id: doc.id,
+                  referral_id: referralId,
+                  document_type: body.document_type,
+                  media_type: body.media_type,
+                  size_bytes: stored.size,
+                },
+                created: doc.created,
               },
-              created: doc.created,
-            },
-            resourceType: "referral_document",
-            resourceId: doc.id,
-          };
-        } catch (e) {
-          await docs.store.remove(stored.objectKey).catch(() => undefined);
-          throw e;
-        }
-      },
-    );
-  });
+              resourceType: "referral_document",
+              resourceId: doc.id,
+            };
+          } catch (e) {
+            await docs.store.remove(stored.objectKey).catch(() => undefined);
+            throw e;
+          }
+        },
+      );
+    },
+  );
 
   app.post(
     `${base}/:referralId/documents/:documentId/link`,

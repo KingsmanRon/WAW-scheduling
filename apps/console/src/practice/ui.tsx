@@ -243,8 +243,7 @@ export function PatientPicker({
   const [results, setResults] = useState<PatientSummary[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const search = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const search = async () => {
     if (text.trim().length < 2) return;
     setBusy(true);
     setError("");
@@ -263,7 +262,9 @@ export function PatientPicker({
   };
   return (
     <div className="picker">
-      <form className="search-row" onSubmit={search} role="search">
+      {/* Not a <form>: the picker sits inside other forms (waitlist,
+          referrals), and a nested form submits natively and reloads. */}
+      <div className="search-row" role="search">
         <label className="vh" htmlFor="patient-search">
           Find a patient
         </label>
@@ -272,14 +273,25 @@ export function PatientPicker({
           value={text}
           autoFocus={autoFocus}
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter searches here and never submits a surrounding form.
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            void search();
+          }}
           placeholder="Mobile, e-mail, patient number, ID or name"
           autoComplete="off"
         />
-        <button className="btn btn-secondary" disabled={busy}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={busy}
+          onClick={() => void search()}
+        >
           <Icon name="search" size={18} />
           Search
         </button>
-      </form>
+      </div>
       <ErrorNote error={error} />
       {results && results.length === 0 && (
         <p className="muted small">

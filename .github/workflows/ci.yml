@@ -36,12 +36,12 @@ jobs:
         run: npx vitest run --project unit --reporter=verbose --reporter=json --outputFile.json=unit-report.json
       - name: Assert unit suite ran without skips
         run: node scripts/assert-test-report.mjs unit-report.json 145
-      - name: PostgreSQL integration (migrations, RLS, scheduling core, concurrency, practice API, patients, worker outbox/notifications/EMR webhooks, WhatsApp channel and access layer, referral register and documents, waitlist offers and their concurrency, dispatcher, ambiguity, poison, idempotency, outcomes, metrics, rules, artifacts, auth/tenancy, acceptance 1-29, E2E flows A-I)
+      - name: PostgreSQL integration (migrations, RLS, scheduling core, concurrency, practice API, security (authorisation matrix, API surface, console secrets), patients, worker outbox/notifications/EMR webhooks, WhatsApp channel and access layer, referral register and documents, waitlist offers and their concurrency, dispatcher, ambiguity, poison, idempotency, outcomes, metrics, rules, artifacts, auth/tenancy, acceptance 1-29, E2E flows A-I)
         env:
           QUALIFICATION_REPORT: qualification-report.json
         run: npx vitest run --project integration --reporter=verbose --reporter=json --outputFile.json=integration-report.json
       - name: Assert integration suites ran without skips
-        run: node scripts/assert-test-report.mjs integration-report.json 173
+        run: node scripts/assert-test-report.mjs integration-report.json 185
       - name: Build
         run: npm run build
       - name: Install Bicep
@@ -64,6 +64,44 @@ jobs:
             unit-report.json
             integration-report.json
             qualification-report.json
+  e2e:
+    # The built console, API and worker against a real database, driven in
+    # Chromium (desktop and phone), with the WhatsApp channel end to end.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.4
+        env:
+          {
+            POSTGRES_DB: access_test,
+            POSTGRES_USER: postgres,
+            POSTGRES_PASSWORD: postgres,
+          }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      E2E_DATABASE_URL: "postgres://postgres:postgres@127.0.0.1:5432/access_e2e"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Browser end-to-end (reception booking and visit lifecycle, walk-in registration, reschedule and cancel, two-desk double booking, roles, blocks and leave, WhatsApp to console and back, waitlist offer accepted on WhatsApp)
+        run: npx playwright test
+      - name: Assert browser suite ran without skips or flakes
+        run: node scripts/assert-test-report.mjs e2e-report.json 15
+      - name: Upload browser test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: access-e2e
+          path: |
+            e2e-report.json
+            test-results/
   image:
     runs-on: ubuntu-latest
     steps:

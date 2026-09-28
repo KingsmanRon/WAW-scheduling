@@ -43,6 +43,7 @@ export default defineConfig({
           include: [
             "tests/integration/**/*.test.ts",
             "tests/concurrency/**/*.test.ts",
+            "tests/security/**/*.test.ts",
             "tests/e2e/**/*.test.ts",
           ],
           globalSetup: ["tests/support/global-setup.ts"],

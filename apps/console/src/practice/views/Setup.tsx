@@ -644,8 +644,8 @@ function AddLeaveDialog({
           <div className="note">
             <p>
               {conflicts.length} booked appointment
-              {conflicts.length === 1 ? "" : "s"} fall in this time. They stay
-              booked: move or cancel them with the patients.
+              {conflicts.length === 1 ? " falls" : "s fall"} in this time. They
+              stay booked: move or cancel them with the patients.
             </p>
             <ul className="small">
               {conflicts.map((c) => (

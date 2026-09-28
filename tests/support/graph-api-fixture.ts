@@ -29,72 +29,75 @@ export class GraphApiFixture {
   url = "";
   constructor(readonly accessToken: string) {}
 
-  async start(): Promise<void> {
-    this.server = http.createServer((req, res) => {
-      const chunks: Buffer[] = [];
-      req.on("data", (c: Buffer) => chunks.push(c));
-      req.on("end", () => {
-        let body: Record<string, unknown> = {};
-        try {
-          body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-        } catch {
-          body = {};
-        }
-        this.requests.push({
-          method: req.method ?? "",
-          path: req.url ?? "",
-          authorization: req.headers.authorization,
-          body,
-        });
-        const reply = (s: Scripted) => {
-          const send = () => {
-            if (res.destroyed) return;
-            res.writeHead(s.status, {
-              "content-type": "application/json",
-              ...s.headers,
-            });
-            res.end(JSON.stringify(s.body));
-          };
-          if (s.delayMs) setTimeout(send, s.delayMs);
-          else send();
-        };
-        if (req.headers.authorization !== `Bearer ${this.accessToken}`)
-          return reply({
-            status: 401,
-            body: {
-              error: {
-                message: "Error validating access token",
-                type: "OAuthException",
-                code: 190,
-                fbtrace_id: "fixture",
-              },
-            },
+  /** Handles one Graph API request (also mounted by the browser suite's server). */
+  readonly handle = (req: http.IncomingMessage, res: http.ServerResponse) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => {
+      let body: Record<string, unknown> = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      } catch {
+        body = {};
+      }
+      this.requests.push({
+        method: req.method ?? "",
+        path: req.url ?? "",
+        authorization: req.headers.authorization,
+        body,
+      });
+      const reply = (s: Scripted) => {
+        const send = () => {
+          if (res.destroyed) return;
+          res.writeHead(s.status, {
+            "content-type": "application/json",
+            ...s.headers,
           });
-        const next = this.scripted.shift();
-        if (next) return reply(next);
-        if (body.status === "read")
-          return reply({ status: 200, body: { success: true } });
+          res.end(JSON.stringify(s.body));
+        };
+        if (s.delayMs) setTimeout(send, s.delayMs);
+        else send();
+      };
+      if (req.headers.authorization !== `Bearer ${this.accessToken}`)
         return reply({
-          status: 200,
+          status: 401,
           body: {
-            messaging_product: "whatsapp",
-            contacts: [
-              {
-                input: String(body.to ?? ""),
-                wa_id: String(body.to ?? ""),
-              },
-            ],
-            messages: [
-              {
-                id: `wamid.${randomUUID().replace(/-/g, "")}`,
-                message_status: "accepted",
-              },
-            ],
+            error: {
+              message: "Error validating access token",
+              type: "OAuthException",
+              code: 190,
+              fbtrace_id: "fixture",
+            },
           },
         });
+      const next = this.scripted.shift();
+      if (next) return reply(next);
+      if (body.status === "read")
+        return reply({ status: 200, body: { success: true } });
+      return reply({
+        status: 200,
+        body: {
+          messaging_product: "whatsapp",
+          contacts: [
+            {
+              input: String(body.to ?? ""),
+              wa_id: String(body.to ?? ""),
+            },
+          ],
+          messages: [
+            {
+              id: `wamid.${randomUUID().replace(/-/g, "")}`,
+              message_status: "accepted",
+            },
+          ],
+        },
       });
     });
-    await new Promise<void>((r) => this.server!.listen(0, "127.0.0.1", r));
+  };
+
+  async start(port = 0): Promise<void> {
+    this.server = http.createServer(this.handle);
+    await new Promise<void>((r) => this.server!.listen(port, "127.0.0.1", r));
     this.url = `http://127.0.0.1:${(this.server!.address() as AddressInfo).port}`;
   }
 

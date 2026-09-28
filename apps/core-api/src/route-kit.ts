@@ -74,6 +74,9 @@ export function storableRefusal(
   return null;
 }
 
+/** Requests carrying a base64 document (up to 10 MiB decoded). */
+export const DOCUMENT_BODY_LIMIT = 14_000_000;
+
 type Params = Record<string, string>;
 export const params = (req: FastifyRequest) => req.params as Params;
 export const idParam = (req: FastifyRequest, name: string) =>

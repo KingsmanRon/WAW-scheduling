@@ -47,6 +47,7 @@ import {
 } from "./referral-routes.js";
 import { registerWaitlistRoutes } from "./waitlist-routes.js";
 import { caseDetail, queue } from "./queries.js";
+import { DOCUMENT_BODY_LIMIT } from "./route-kit.js";
 import { CaseService } from "./service.js";
 
 export interface AppDeps {
@@ -101,7 +102,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     );
   const app = Fastify({
     logger: false,
-    bodyLimit: 14_000_000,
+    // Ordinary JSON requests are small; only the routes that take a base64
+    // document raise their own limit (DOCUMENT_BODY_LIMIT).
+    bodyLimit: 1_048_576,
     trustProxy: true,
     genReqId: (req) => {
       const given = req.headers["x-request-id"];
@@ -190,9 +193,25 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ],
     exposedHeaders: ["idempotent-replayed", "x-request-id"],
   });
+  const hsts = deps.info.profile !== "local";
   app.addHook("onRequest", async (req, reply) => {
     req.startedAt = Date.now();
     reply.header("x-request-id", String(req.id));
+    // Responses carry patient and schedule data and are never HTML: not
+    // cached, sniffed, framed or referred on. Routes may tighten further.
+    reply.header("cache-control", "no-store");
+    reply.header("x-content-type-options", "nosniff");
+    reply.header("x-frame-options", "DENY");
+    reply.header("referrer-policy", "no-referrer");
+    reply.header(
+      "content-security-policy",
+      "default-src 'none'; frame-ancestors 'none'",
+    );
+    if (hsts)
+      reply.header(
+        "strict-transport-security",
+        "max-age=31536000; includeSubDomains",
+      );
   });
   app.addHook("onResponse", async (req, reply) => {
     const route = req.routeOptions.url ?? "unmatched";
@@ -316,28 +335,36 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // Referral intake (REFERRAL case type).
-  app.post("/v1/referrals", async (req, reply) => {
-    const a = await auth(req);
-    authorize(a.role, "referral.ingest");
-    const input = ingestRequestSchema.parse(req.body);
-    const result = await deps.service.ingestReferral(a, input);
-    metrics.inc(
-      result.deduplicated
-        ? "referral_ingest_replayed_total"
-        : "referral_ingested_total",
-    );
-    return reply.code(result.deduplicated ? 200 : 201).send(result);
-  });
+  app.post(
+    "/v1/referrals",
+    { bodyLimit: DOCUMENT_BODY_LIMIT },
+    async (req, reply) => {
+      const a = await auth(req);
+      authorize(a.role, "referral.ingest");
+      const input = ingestRequestSchema.parse(req.body);
+      const result = await deps.service.ingestReferral(a, input);
+      metrics.inc(
+        result.deduplicated
+          ? "referral_ingest_replayed_total"
+          : "referral_ingested_total",
+      );
+      return reply.code(result.deduplicated ? 200 : 201).send(result);
+    },
+  );
   // Generic case creation: only enabled case types execute.
-  app.post("/v1/cases", async (req, reply) => {
-    const a = await auth(req);
-    authorize(a.role, "referral.ingest");
-    const { case_type, ...rest } = createCaseRequestSchema.parse(req.body);
-    assertCaseTypeEnabled(case_type);
-    const input = ingestRequestSchema.parse(rest);
-    const result = await deps.service.ingestReferral(a, input);
-    return reply.code(result.deduplicated ? 200 : 201).send(result);
-  });
+  app.post(
+    "/v1/cases",
+    { bodyLimit: DOCUMENT_BODY_LIMIT },
+    async (req, reply) => {
+      const a = await auth(req);
+      authorize(a.role, "referral.ingest");
+      const { case_type, ...rest } = createCaseRequestSchema.parse(req.body);
+      assertCaseTypeEnabled(case_type);
+      const input = ingestRequestSchema.parse(rest);
+      const result = await deps.service.ingestReferral(a, input);
+      return reply.code(result.deduplicated ? 200 : 201).send(result);
+    },
+  );
   app.get("/v1/case-types", async (req) => {
     await auth(req);
     return CASE_TYPES.map((t) => ({ case_type: t, enabled: t === "REFERRAL" }));
@@ -376,17 +403,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       verifyEvidenceChain(c, a.tenantId, caseId),
     );
   });
-  app.post("/v1/cases/:caseId/interactions", async (req, reply) => {
-    const a = await auth(req);
-    authorize(a.role, "case.interaction");
-    const caseId = uuid.parse((req.params as { caseId: string }).caseId);
-    const result = await deps.service.addInteraction(
-      a,
-      caseId,
-      interactionRequestSchema.parse(req.body),
-    );
-    return reply.code(result.deduplicated ? 200 : 201).send(result);
-  });
+  app.post(
+    "/v1/cases/:caseId/interactions",
+    { bodyLimit: DOCUMENT_BODY_LIMIT },
+    async (req, reply) => {
+      const a = await auth(req);
+      authorize(a.role, "case.interaction");
+      const caseId = uuid.parse((req.params as { caseId: string }).caseId);
+      const result = await deps.service.addInteraction(
+        a,
+        caseId,
+        interactionRequestSchema.parse(req.body),
+      );
+      return reply.code(result.deduplicated ? 200 : 201).send(result);
+    },
+  );
   app.post("/v1/cases/:caseId/actions", async (req) => {
     const a = await auth(req);
     // Authorise the named action before validating the rest of the body.

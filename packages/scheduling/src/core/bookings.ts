@@ -590,6 +590,15 @@ export async function confirmHold(
       WHERE tenant_id=$1 AND practice_id=$2 AND id=$3`,
     [ctx.tenantId, ctx.practiceId, hold.id],
   );
+  // Confirming completes the interaction that made the hold, so it is
+  // recorded under that channel (a receptionist's confirm request carries
+  // none). A waitlist offer is held by the system and answered through
+  // whichever channel the answer came in.
+  const via: CommandContext["channel"] =
+    hold.purpose === "WAITLIST_OFFER"
+      ? ctx.channel
+      : (appointment.sourceChannel as CommandContext["channel"]);
+  ctx = via === ctx.channel ? ctx : { ...ctx, channel: via };
   await c.query(
     `UPDATE scheduling.appointments SET status='CONFIRMED', confirmed_at=now(), notes=coalesce($4,notes), version=version+1
       WHERE tenant_id=$1 AND practice_id=$2 AND id=$3`,

@@ -15,6 +15,7 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:fault": "vitest run tests/fault",
+    "test:e2e": "playwright test",
     "qualify:synthetic": "vitest run --project integration tests/e2e/qualification.test.ts",
     "build": "npm run build --workspaces --if-present",
     "dev": "concurrently \"npm -w @access/core-api run dev\" \"npm -w @access/worker run dev\" \"npm -w @access/console run dev\"",

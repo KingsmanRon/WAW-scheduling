@@ -222,6 +222,17 @@ describe.runIf(databaseEnabled)("practice scheduling API (JWT)", () => {
     );
     expect(confirmed.statusCode).toBe(200);
     const id = confirmed.json().appointment.id;
+    // The confirm request names no channel: it is recorded under the hold's.
+    const created = await ownerPool().query(
+      "SELECT channel FROM platform.audit_events WHERE tenant_id=$1 AND action='appointment.created' AND resource_id=$2",
+      [p.tenantId, id],
+    );
+    expect(created.rows).toEqual([{ channel: "PHONE" }]);
+    const confirmedEvent = await ownerPool().query(
+      "SELECT channel FROM scheduling.appointment_events WHERE tenant_id=$1 AND appointment_id=$2 AND event_type='CONFIRMED'",
+      [p.tenantId, id],
+    );
+    expect(confirmedEvent.rows).toEqual([{ channel: "PHONE" }]);
     const moved = await call(
       "POST",
       path(p, `/appointments/${id}/reschedule`),
