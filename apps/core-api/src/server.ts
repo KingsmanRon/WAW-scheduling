@@ -105,7 +105,15 @@ const app = await buildApp({
     buildId: config.buildId,
   },
 });
-await app.listen({ host: "0.0.0.0", port: config.port });
+// "::" accepts IPv4 and IPv6 (Railway's private network is IPv6); hosts
+// without IPv6 fall back to IPv4 only.
+try {
+  await app.listen({ host: "::", port: config.port });
+} catch (e) {
+  const code = (e as { code?: string }).code;
+  if (code !== "EAFNOSUPPORT" && code !== "EADDRNOTAVAIL") throw e;
+  await app.listen({ host: "0.0.0.0", port: config.port });
+}
 log("info", "api_started", {
   profile: config.profile,
   data_mode: config.dataMode,
@@ -113,3 +121,26 @@ log("info", "api_started", {
   port: config.port,
   build: config.buildId,
 });
+
+// On deploy or scale-in the platform sends SIGTERM: stop accepting, let
+// in-flight requests finish (their transactions commit or roll back whole),
+// then release the pool. A request still running after 25 s is cut off.
+let stopping = false;
+const stop = (signal: string) => {
+  if (stopping) return;
+  stopping = true;
+  log("info", "api_stopping", { status: signal });
+  setTimeout(() => {
+    log("error", "api_stop_timeout", {});
+    process.exit(1);
+  }, 25_000).unref();
+  void app
+    .close()
+    .then(() => pool.end())
+    .then(() => {
+      log("info", "api_stopped", {});
+      process.exit(0);
+    });
+};
+process.on("SIGTERM", () => stop("SIGTERM"));
+process.on("SIGINT", () => stop("SIGINT"));

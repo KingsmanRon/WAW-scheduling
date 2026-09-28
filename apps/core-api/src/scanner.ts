@@ -41,8 +41,9 @@ export class MockSyntheticScanner implements ArtifactScanner {
 }
 
 /**
- * ClamAV daemon over TCP using the INSTREAM protocol. Deploy clamd next to
- * the API (see infra/azure/main.bicep sidecar) and keep signatures updated.
+ * ClamAV daemon over TCP using the INSTREAM protocol. Run clamd as a private
+ * service next to the API (Railway: DEPLOYMENT.md) and keep signatures
+ * updated.
  */
 export class ClamAvScanner implements ArtifactScanner {
   readonly name = "clamav";

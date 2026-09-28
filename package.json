@@ -26,6 +26,8 @@
     "validate:infra": "bash infra/validate.sh",
     "check:secrets": "bash scripts/check-secrets.sh",
     "tenant:bootstrap": "tsx packages/db/src/bootstrap-tenant.ts",
+    "practice:bootstrap": "tsx apps/worker/src/cli/practice-bootstrap.ts",
+    "practice:demo": "tsx apps/worker/src/cli/practice-demo.ts",
     "channel:whatsapp:connect": "tsx apps/worker/src/cli/whatsapp-connect.ts"
   },
   "devDependencies": {

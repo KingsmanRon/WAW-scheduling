@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, watch } from "./support/test.js";
+import type { Page } from "@playwright/test";
 import {
   appointmentsOf,
   closeDb,
@@ -33,6 +34,7 @@ test("two receptionists pick the same time: one holds it, the other is told it h
 }) => {
   const desks = await Promise.all([browser.newContext(), browser.newContext()]);
   const [one, two] = await Promise.all(desks.map((d) => d.newPage()));
+  const problems = [...[one!, two!].map(watch)];
   await signIn(one!, "RECEPTIONIST", "desk-one");
   await signIn(two!, "RECEPTIONIST", "desk-two");
   await lookAtSmitsDay(one!, "johan");
@@ -70,5 +72,6 @@ test("two receptionists pick the same time: one holds it, the other is told it h
     [TENANT_ID, PATIENTS.johan.mobile],
   );
   expect(overlapping.rows[0]!.n).toBe(1);
+  expect(problems.flat()).toEqual([]);
   await Promise.all(desks.map((d) => d.close()));
 });

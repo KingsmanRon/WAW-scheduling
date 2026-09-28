@@ -1,11 +1,31 @@
-# Railway is supported for synthetic-staging only. Required variables:
-# ACCESS_DEPLOYMENT_PROFILE=synthetic-staging, WORKER_DATABASE_URL (access_worker),
-# DATABASE_SSL=require, DATABASE_CA_CERT, CONNECTOR_KIND=mock, and the
-# DISPATCH_*/RECONCILE_* values. Never MIGRATION_DATABASE_URL.
+# ACCESS worker: outbox routing, notifications (WhatsApp templates, e-mail),
+# the WhatsApp access layer, waitlist offers, EMR webhooks and housekeeping
+# (hold expiry, reminders, retention). Health, readiness and metrics on PORT.
+#
+# Variables (full list: DEPLOYMENT.md):
+#   ACCESS_DEPLOYMENT_PROFILE, ACCESS_DATA_MODE, NODE_ENV=production, BUILD_ID
+#   WORKER_DATABASE_URL     access_worker login via the Supabase pooler
+#   DATABASE_SSL=require, DATABASE_CA_CERT
+#   IDENTIFIER_HASH_KEY, IDENTIFIER_HASH_KEY_ID   (the API's values)
+#   WHATSAPP_<NAME>_TOKEN   one per WhatsApp connection (its secret_ref)
+#   SMTP_URL, SMTP_FROM     e-mail notifications (optional)
+#   EMR_WEBHOOK_<NAME>_SECRET  one per EMR webhook connection (optional)
+#   INTENT_CLASSIFIER=anthropic, ANTHROPIC_API_KEY (optional; REAL data also
+#   needs INTENT_CLASSIFIER_PROCESSOR_APPROVED=true), METRICS_TOKEN
+#   CONNECTOR_KIND=none     (organisation referral destination: manual entry)
+# Never MIGRATION_DATABASE_URL.
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+watchPatterns = ["apps/worker/**", "packages/**", "package-lock.json", "Dockerfile"]
+
 [deploy]
 startCommand = "node apps/worker/dist/main.js"
-restartPolicyType = "ON_FAILURE"
+healthcheckPath = "/ready"
+healthcheckTimeout = 60
+restartPolicyType = "ALWAYS"
+# Queue work is lease-based (SKIP LOCKED), so more replicas are safe; one
+# is enough for a practice group.
 numReplicas = 1
+# SIGTERM finishes the current cycle; unfinished leases simply expire.
+drainingSeconds = 60

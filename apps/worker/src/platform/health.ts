@@ -68,11 +68,19 @@ export function startHealthServer(
     }
     return json(404, { error: "NOT_FOUND" });
   });
-  return new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(options.port, options.host ?? "0.0.0.0", () => {
-      server.off("error", reject);
-      resolve(server);
+  // "::" accepts IPv4 and IPv6 (Railway's private network is IPv6); hosts
+  // without IPv6 fall back to IPv4 only.
+  const listen = (host: string) =>
+    new Promise<http.Server>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(options.port, host, () => {
+        server.off("error", reject);
+        resolve(server);
+      });
     });
+  if (options.host) return listen(options.host);
+  return listen("::").catch((e: { code?: string }) => {
+    if (e.code !== "EAFNOSUPPORT" && e.code !== "EADDRNOTAVAIL") throw e;
+    return listen("0.0.0.0");
   });
 }

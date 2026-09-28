@@ -1,0 +1,18 @@
+# ACCESS migration job: applies supabase/migrations as the database owner,
+# then exits. Run it (Railway: "Deploy" on this service) before deploying an
+# API or worker release that needs a new migration. It is the only holder of
+# the owner credential.
+#
+# Variables: ACCESS_DEPLOYMENT_PROFILE, NODE_ENV=production,
+#   MIGRATION_DATABASE_URL  the owner (postgres) login on a SESSION-mode
+#                           connection (Supabase session pooler, port 5432):
+#                           the runner holds a session advisory lock.
+#   DATABASE_SSL=require, DATABASE_CA_CERT
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["supabase/migrations/**", "packages/db/**"]
+
+[deploy]
+startCommand = "node packages/db/dist/migrate.js"
+restartPolicyType = "NEVER"

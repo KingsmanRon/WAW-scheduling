@@ -44,14 +44,7 @@ jobs:
         run: node scripts/assert-test-report.mjs integration-report.json 185
       - name: Build
         run: npm run build
-      - name: Install Bicep
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          curl -sSL -o "$HOME/.local/bin/bicep" https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
-          chmod +x "$HOME/.local/bin/bicep"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/bicep" --version
-      - name: Infrastructure validation
+      - name: Deployment asset validation (Railway, Vercel, Compose)
         run: npm run validate:infra
       - name: Secret scanning
         run: npm run check:secrets

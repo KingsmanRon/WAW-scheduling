@@ -6,5 +6,10 @@
     "declaration": false,
     "types": ["node"]
   },
-  "include": ["tests/**/*.ts", "vitest.config.ts", "playwright.config.ts"]
+  "include": [
+    "tests/**/*.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "apps/console/vite.config.ts"
+  ]
 }
