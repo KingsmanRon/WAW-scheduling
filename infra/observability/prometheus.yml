@@ -1,0 +1,24 @@
+# Scrape configuration for the API and worker metrics, for a Prometheus or
+# Grafana Alloy (Prometheus mode) service in the same Railway project: it
+# reaches both over the private network and presents METRICS_TOKEN.
+# Replace <api-port>/<worker-port> with the services' PORT values, and supply
+# the token from the scraper's own secret store (never commit it).
+global:
+  scrape_interval: 30s
+rule_files:
+  - alerts.yml
+scrape_configs:
+  - job_name: access-api
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/access/metrics-token
+    static_configs:
+      - targets: ["api.railway.internal:<api-port>"]
+  - job_name: access-worker
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/access/metrics-token
+    static_configs:
+      - targets: ["worker.railway.internal:<worker-port>"]

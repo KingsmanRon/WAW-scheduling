@@ -1,98 +1,75 @@
-# ACCESS — Referral Operations (v1.1)
+# ACCESS — appointments and scheduling for medical practices
 
-ACCESS is a standalone patient-access orchestration layer. It converts inbound
-referrals into verified, complete, tracked and measurable outcomes inside the
-provider's existing systems:
+ACCESS runs a practice's appointment book across every way patients reach
+it: reception on the phone and at the desk, WhatsApp, referrals and the
+waitlist. One **Scheduling Core** decides availability, holds, bookings and
+every change to an appointment; no channel books any other way, and the
+database itself refuses a double booking.
+
+- **Practice console** (web): today's list with arrivals and no-shows,
+  day and week calendars by practitioner and location, guided booking with
+  a five-minute hold, reschedule and cancel, patient search and
+  registration, waitlist, referrals with private documents, WhatsApp
+  conversations handed to reception, message delivery log, schedule setup
+  (hours, leave, types, practitioners, locations) and the audit trail.
+  What each person sees and may do follows their practice role.
+- **WhatsApp**: patients book, see, move and cancel appointments and accept
+  waitlist offers in a guided conversation; anything it cannot handle goes
+  to reception. Works without any language model.
+- **Notifications**: confirmations, changes, cancellations, reminders and
+  waitlist offers by WhatsApp template or e-mail, only with consent, each
+  with a visible status and reason.
+- **Integrations**: signed webhooks to EMR systems.
+
+## Documentation
+
+| Document                                                         | For                                                                      |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [ARCHITECTURE.md](ARCHITECTURE.md)                               | how it is built: Scheduling Core, channels, outbox, tenancy, AI boundary |
+| [DEPLOYMENT.md](DEPLOYMENT.md)                                   | Supabase, Railway, Vercel, WhatsApp activation, onboarding a practice    |
+| [RUNBOOK.md](RUNBOOK.md)                                         | health, logs, alerts, incidents, retention, patient requests             |
+| [SECURITY.md](SECURITY.md)                                       | authentication, roles, isolation, data protection, POPIA                 |
+| [docs/client-pilot-checklist.md](docs/client-pilot-checklist.md) | gates before real patient data                                           |
+| [docs/referral-operations](docs/referral-operations/)            | the organisation referral workspace                                      |
+
+## Repository
 
 ```text
-referral received → patient resolved → information completed → administrative
-readiness determined → destination updated → ready for booking → appointment
-booked or referral deliberately closed → business outcome measured
+apps/core-api      Fastify API (practice API, WhatsApp webhook, documents)
+apps/worker        outbox, notifications, WhatsApp access layer, waitlist,
+                   webhooks, housekeeping; operator commands in src/cli
+apps/console       React console (Vite), deployed to Vercel
+packages/scheduling  the Scheduling Core (domain + transactional commands)
+packages/patients    patient registry and normalised search
+packages/notifications, integrations, access, policy, contracts, db,
+config, observability, domain, rules
+supabase/migrations  PostgreSQL schema, RLS, grants (ledger-applied)
+infra/railway, infra/observability, apps/console/vercel.json
+tests/unit, integration, concurrency, security, e2e (vitest)
+tests/browser        Playwright end-to-end suite
 ```
 
-ACCESS makes **deterministic administrative decisions only** (identity
-sufficiency, required information and documents, configured routing, connector
-availability, when staff must intervene). It never decides diagnosis, clinical
-urgency, prioritisation, treatment suitability or clinical acceptance. Anything
-that looks urgent or clinical is routed to a human safety workflow.
+## Local development (synthetic data only)
 
-## Status
-
-| Capability                                                                     | Implemented       | Client-pilot ready                       | Production ready                     |
-| ------------------------------------------------------------------------------ | ----------------- | ---------------------------------------- | ------------------------------------ |
-| `access_case` aggregate (REFERRAL; five other case types defined, fail closed) | yes               | yes                                      | yes                                  |
-| Case lifecycle through booking or deliberate closure, resolution codes         | yes               | yes                                      | yes                                  |
-| Append-only interactions, outcome observations, effort events                  | yes               | yes                                      | yes                                  |
-| Versioned, immutable administrative rule sets + deterministic evaluator        | yes               | yes                                      | yes                                  |
-| Business measurement with provenance (case and cohort)                         | yes               | yes                                      | yes                                  |
-| Workforce auth: Supabase JWT + membership-derived tenant and role              | yes               | yes (after IdP setup)                    | needs pen test                       |
-| PostgreSQL RLS, least-privilege runtime roles, ledger migrations               | yes               | yes                                      | yes                                  |
-| Managed private artifact storage (Supabase Storage + app-layer AES-GCM)        | yes               | yes (after bucket provisioning)          | needs key rotation                   |
-| Malware scanning (ClamAV INSTREAM sidecar), fail closed                        | yes               | yes (after clamd deployment)             | needs signature monitoring           |
-| Manual destination workflow (staff enters referral in the PMS)                 | yes               | **yes — the pilot destination path**     | yes                                  |
-| Automated destination connector                                                | mock only         | **no** (no real PMS connector qualified) | no                                   |
-| Closed-loop outcome readback                                                   | port + mock       | staff/import only                        | needs a qualified connector          |
-| Staff console: queue, case detail, actions, dashboard, rules                   | yes               | yes                                      | needs usability/accessibility review |
-| Email / WhatsApp / voice / patient portal channels                             | defined, disabled | no                                       | future                               |
-| Appointment scheduling, rescheduling, cancellation cases                       | defined, disabled | no                                       | future                               |
-
-"Client-pilot ready" still requires every gate in
-[docs/client-pilot-checklist.md](docs/client-pilot-checklist.md) before any
-identifiable patient data is used. **Until then: synthetic data only.**
-
-## Architecture
-
-TypeScript modular monolith over PostgreSQL (Supabase).
-
-- `apps/core-api` — Fastify API: intake, interactions, staff actions, outcome
-  import, queue/case/metrics queries, rule-set and membership administration.
-  JWT auth, artifact storage port, scanner port, extraction port.
-- `apps/worker` — leased, case-ordered outbox dispatcher; ambiguous-write
-  reconciler; outcome readback poller; follow-up/escalation timers.
-- `apps/console` — React/Vite staff console (Supabase sign-in).
-- `packages/contracts` — versioned schemas and the platform vocabulary.
-- `packages/domain` — case state machine and outcome-observation planning.
-- `packages/rules` — typed rule-set schema and deterministic evaluator.
-- `packages/policy` — RBAC and case-type/operation authorisation.
-- `packages/db` — case engine, evidence chain, command idempotency, metrics,
-  ledger migration runner, seeding/bootstrap.
-- `packages/config` — fail-closed startup configuration per profile.
-- `supabase/migrations` — `0001`–`0005` (additive; applied by the ledger runner).
-
-Read next: [ADR 0002 — case aggregate](docs/adr/0002-access-case-aggregate.md),
-[ADR 0003 — execution, identity and storage](docs/adr/0003-execution-identity-storage.md),
-[data model](docs/data-model.md), [contracts](docs/contracts.md),
-[security](docs/security.md), [deployment](docs/deployment.md),
-[runbooks](docs/runbooks.md), [rules guide](docs/rules-guide.md),
-[connector qualification](docs/connector-qualification.md),
-[synthetic qualification](docs/qualification.md).
-
-## Local development (synthetic data)
-
-Node 20+, npm, PostgreSQL 16 (or Docker Compose).
+Node 20+, npm and Docker (or a local PostgreSQL 16).
 
 ```bash
-cp .env.example .env
 npm ci
-docker compose up --build        # postgres, migrate, seed, api :3001, worker
-VITE_AUTH_MODE=synthetic npm -w @access/console run dev   # console :3000
+docker compose up --build        # postgres, migrations, api :3001, worker
+export MIGRATION_DATABASE_URL=postgres://access_owner:access_owner@localhost:5432/access
+npm run practice:bootstrap -- --tenant 11111111-1111-4111-8111-111111111111 \
+  --tenant-name "Synthetic Health" --name "Demo Practice" \
+  --timezone Africa/Johannesburg \
+  --admin-user 99999999-9999-4999-8999-999999999999 --admin-name "Demo Admin"
+IDENTIFIER_HASH_KEY=1111111111111111111111111111111111111111111111111111111111111111 \
+  npm run practice:demo -- --tenant 11111111-1111-4111-8111-111111111111 \
+  --practice <practice id printed above>
+VITE_AUTH_MODE=synthetic npm -w @access/console run dev    # console :3000
 ```
 
-Without Compose:
-
-```bash
-set -a; source .env; set +a
-npm run db:migrate               # MIGRATION_DATABASE_URL (owner)
-npm run db:seed                  # synthetic organisations + default rule sets
-psql "$MIGRATION_DATABASE_URL" -c "ALTER ROLE access_request LOGIN PASSWORD 'local-placeholder'; ALTER ROLE access_worker LOGIN PASSWORD 'local-placeholder'"
-npm -w @access/core-api run dev
-npm -w @access/worker run dev
-```
-
-Synthetic organisation `11111111-…` uses the (mock) connector destination;
-`22222222-…` uses the manual destination workflow. In the console choose a
-role and use the synthetic fixtures (`complete`, `missing-insurance`,
-`ambiguous-identity`, `urgent`) or the structured intake form.
+Sign in with organisation `11111111-1111-4111-8111-111111111111`, any
+practice role and a name (the synthetic bridge exists only for local and
+staging use).
 
 ## Checks
 
@@ -100,21 +77,25 @@ role and use the synthetic fixtures (`complete`, `missing-insurance`,
 npm run format && npm run lint && npm run typecheck
 npm run test:unit
 TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/access_test npm run test:integration
-npm run qualify:synthetic          # Flows A-I; set QUALIFICATION_REPORT=report.json
-npm run build && npm run validate:infra && npm run check:secrets
+npm run build && npm run test:e2e      # needs PostgreSQL; resets the access_e2e database
+npm run validate:infra && npm run check:secrets
 ```
 
-The integration project drops and re-migrates the test database, then runs
-every PostgreSQL suite with the real `access_request`/`access_worker` logins.
-In CI a missing database fails the build; skipped tests fail the build.
+- **Unit**: availability engine and time zones, state machine, booking and
+  referral rules, patient normalisation, notification selection, the
+  WhatsApp interpreter and classifier boundary, policy, configuration.
+- **Integration** (real PostgreSQL, real least-privilege logins):
+  migrations and RLS, the Scheduling Core, the practice API, the worker,
+  the WhatsApp channel end to end against a Graph API stand-in, referrals
+  and documents, waitlist offers.
+- **Concurrency**: 25 simultaneous bookings of one slot → exactly one
+  booked and 24 `SLOT_UNAVAILABLE`; holds, reschedules and waitlist offers
+  racing each other.
+- **Security**: the authorisation matrix (every route × every role),
+  cross-practice and anonymous access, API hardening, and proof that the
+  console bundle holds no server secret.
+- **Browser** (Playwright, desktop and phone): the console, API and worker
+  as deployed, including WhatsApp ↔ console flows and the waitlist.
 
-## Deployment
-
-See [docs/deployment.md](docs/deployment.md). Profiles: `local`,
-`synthetic-staging`, `client-pilot`, `production`. Azure Container Apps is the
-reference production target (`infra/azure`), with Supabase for PostgreSQL,
-Auth and Storage and Vercel for the console. Railway is synthetic-staging only.
-
-The historical planning documents (`PRODUCT_ASSESSMENT.md`,
-`ARCHITECTURE_REVIEW.md`, `IMPLEMENTATION_HANDOFF.md`, `NEXT_CHAT_PROMPT.md`)
-describe the pre-v1.1 slice and are kept for context only.
+CI (`.github/workflows/ci.yml`) runs all of them; skipped tests fail the
+build.

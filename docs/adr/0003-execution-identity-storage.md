@@ -65,6 +65,6 @@
 ## Consequences
 
 The pilot can run with **no automated connector** (manual destination) while
-a PMS connector is qualified against `docs/connector-qualification.md`. The
+a PMS connector is qualified against `docs/referral-operations/connector-qualification.md`. The
 cost is an extra network hop for scanning and a Supabase Storage dependency
 on the upload path.

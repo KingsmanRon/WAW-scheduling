@@ -65,7 +65,7 @@ No action records or requires a clinical judgement.
 
 `rule-decision.v1`: rule-set id/version/definition hash, input hash, identity
 status and reason, missing fields/documents, unmet prerequisites, service,
-routing, destination mode, outcome, decision hash. See `docs/rules-guide.md`.
+routing, destination mode, outcome, decision hash. See `docs/referral-operations/rules-guide.md`.
 
 ## Measures
 
