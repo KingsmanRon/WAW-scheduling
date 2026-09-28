@@ -87,6 +87,7 @@ describe("the browser console holds no privileged credential and changes nothing
   it("keeps a service key in the build environment out of the bundle", async () => {
     const out = await mkdtemp(join(tmpdir(), "console-build-"));
     const canary = `canary-${randomUUID()}`;
+    const key = `service-${canary}`;
     try {
       await run(
         "npx",
@@ -109,8 +110,8 @@ describe("the browser console holds no privileged credential and changes nothing
             VITE_SUPABASE_URL: "https://project.supabase.example",
             VITE_SUPABASE_ANON_KEY: "public-anon-key-for-this-build",
             // As if the build machine also held server secrets.
-            SUPABASE_SERVICE_ROLE_KEY: `service-${canary}`,
-            DATABASE_URL: `postgres://user:${canary}@db.example/app`,
+            SUPABASE_SERVICE_ROLE_KEY: key,
+            DATABASE_URL: `postgres://owner:x@db.example.test/${canary}`,
             ANTHROPIC_API_KEY: `sk-ant-${canary}`,
           },
         },
