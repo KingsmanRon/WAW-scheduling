@@ -236,7 +236,6 @@ function Workspace({ route, go }: ViewProps) {
       home={link("today")}
       compact={[label(membership.role), practice.data.practice.name]}
       context={[
-        { label: "Practice", value: practice.data.practice.name },
         { label: "Signed in as", value: membership.display_name },
         { label: "Role", value: roleLabel(membership.role) },
         {

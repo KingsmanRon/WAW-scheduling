@@ -94,7 +94,8 @@ a.rail__brand {
   gap: var(--s-2) var(--s-3);
 }
 .toolbar select,
-.toolbar input {
+.toolbar input,
+.page-header__actions select {
   width: auto;
   min-width: 10rem;
 }
@@ -200,6 +201,22 @@ a.rail__brand {
 }
 .table tbody tr:hover {
   background: var(--c-surface-2);
+}
+.table td .btn,
+.events .btn {
+  min-height: 32px;
+  margin-block: -6px;
+  padding: 0 var(--s-3);
+}
+.table td .button-row {
+  margin-block: -4px;
+}
+.table td .button-row .btn {
+  margin-block: 0;
+}
+.type-code {
+  display: block;
+  margin-left: calc(9px + var(--s-2));
 }
 .table--compact th,
 .table--compact td {
@@ -367,7 +384,8 @@ a.rail__brand {
   left: 0;
   right: 0;
   z-index: 2;
-  display: block;
+  display: flex;
+  align-items: flex-start;
   padding: 2px var(--s-2);
   border: 0;
   border-top: 2px solid var(--c-closed-mark);
@@ -424,21 +442,31 @@ a.rail__brand {
   z-index: 4;
   box-shadow: var(--e2);
 }
+.calendar__appt-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .calendar__appt-time {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 .calendar__appt-who {
   font-weight: 620;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .calendar__appt-what {
   color: var(--c-ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Too short for two lines: time and patient only (the rest is in the label). */
+.calendar__appt--short {
+  align-content: center;
+  padding-block: 0;
+}
+.calendar__appt--short .calendar__appt-what {
+  display: none;
 }
 .calendar__appt--held {
   border-style: dashed;
@@ -549,9 +577,41 @@ a.rail__brand {
 .slots.is-refreshing {
   opacity: 0.7;
 }
-.slots__day ul {
+.slot-days {
+  display: flex;
+  gap: var(--s-2);
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.slot-days button {
+  display: grid;
+  flex: none;
+  gap: 1px;
+  min-width: 7.5rem;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--c-line-2);
+  border-radius: var(--r-2);
+  background: var(--c-surface);
+  text-align: left;
+}
+.slot-days button:hover {
+  border-color: var(--c-brand-mid);
+}
+.slot-days button[aria-pressed="true"] {
+  border-color: var(--c-brand);
+  box-shadow: inset 0 0 0 1px var(--c-brand);
+  background: var(--c-brand-wash);
+}
+.slot-days__day {
+  font-weight: 650;
+}
+.slot-days__count {
+  color: var(--c-ink-3);
+  font-size: var(--t-xs);
+}
+.slots__list {
   list-style: none;
-  margin: var(--s-2) 0 0;
+  margin: 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
@@ -816,4 +876,60 @@ a.rail__brand {
 .workspace-card__name {
   font-size: var(--t-md);
   font-weight: 650;
+}
+
+/* Phones ------------------------------------------------------------------- */
+@media (max-width: 699px) {
+  .page-header__actions {
+    width: 100%;
+  }
+  /* List tables become one card-like block per row. */
+  .table:not(.table--compact) thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .table:not(.table--compact),
+  .table:not(.table--compact) tbody,
+  .table:not(.table--compact) tr,
+  .table:not(.table--compact) td {
+    display: block;
+  }
+  .table:not(.table--compact) tr {
+    padding: var(--s-3) var(--s-4);
+    border-top: 1px solid var(--c-line);
+  }
+  .table:not(.table--compact) tbody tr:first-child {
+    border-top: 0;
+  }
+  .table:not(.table--compact) td {
+    padding: 2px 0;
+    border: 0;
+  }
+  .table td .btn,
+  .table td .button-row {
+    margin-block: var(--s-2) 0;
+  }
+  .tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--s-2);
+  }
+  .tile {
+    padding: var(--s-3);
+  }
+  .tile__value {
+    font-size: var(--t-xl);
+  }
+  .tile__label {
+    font-size: var(--t-xs);
+  }
+  .form__actions {
+    justify-content: stretch;
+  }
+  .form__actions .btn {
+    flex: 1 1 auto;
+  }
 }

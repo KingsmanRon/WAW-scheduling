@@ -1,4 +1,11 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/geist/wght.css";
 import "@fontsource-variable/geist-mono/wght.css";
@@ -15,20 +22,36 @@ import "./styles/rules.css";
 import "./styles/practice.css";
 import { label, roleLabel, shortId } from "./format";
 import { Shell, type NavItem } from "./layout/Shell";
-import { PracticeApp } from "./practice/PracticeApp";
 import {
   parsePracticeRoute,
   practiceHash,
   type PracticeRoute,
 } from "./practice/route";
 import { SessionProvider, useSession, type Me, type OrgRole } from "./session";
-import { CaseDetail } from "./views/CaseDetail";
-import { Dashboard } from "./views/Dashboard";
 import { Login } from "./views/Login";
-import { NewReferral } from "./views/NewReferral";
 import { Practices } from "./views/Practices";
-import { Queue } from "./views/Queue";
-import { Rules } from "./views/Rules";
+
+// Each workspace is its own chunk: practice staff never download the
+// referral operations views, and the reverse.
+const PracticeApp = lazy(() =>
+  import("./practice/PracticeApp").then((m) => ({ default: m.PracticeApp })),
+);
+const Queue = lazy(() =>
+  import("./views/Queue").then((m) => ({ default: m.Queue })),
+);
+const CaseDetail = lazy(() =>
+  import("./views/CaseDetail").then((m) => ({ default: m.CaseDetail })),
+);
+const Dashboard = lazy(() =>
+  import("./views/Dashboard").then((m) => ({ default: m.Dashboard })),
+);
+const NewReferral = lazy(() =>
+  import("./views/NewReferral").then((m) => ({ default: m.NewReferral })),
+);
+const Rules = lazy(() =>
+  import("./views/Rules").then((m) => ({ default: m.Rules })),
+);
+const loading = <p className="loading page">Loading…</p>;
 
 type ReferralPage = "queue" | "dashboard" | "new" | "rules";
 type Route =
@@ -223,11 +246,13 @@ function App() {
         <Practices notice="You do not have access to that practice, or it is no longer active." />
       );
     return (
-      <PracticeApp
-        key={shown.practice.practiceId}
-        route={shown.practice}
-        go={go}
-      />
+      <Suspense fallback={loading}>
+        <PracticeApp
+          key={shown.practice.practiceId}
+          route={shown.practice}
+          go={go}
+        />
+      </Suspense>
     );
   }
   if (shown.page === "practices" || shown.page === "home" || !me.role)
@@ -237,19 +262,23 @@ function App() {
   return (
     <ReferralWorkspace me={orgMe} active={active}>
       <div className="page" key={key}>
-        {shown.page === "queue" && <Queue open={(id) => go(`#/case/${id}`)} />}
-        {shown.page === "case" && (
-          <CaseDetail
-            key={shown.id}
-            caseId={shown.id}
-            back={() => go("#/queue")}
-          />
-        )}
-        {shown.page === "dashboard" && <Dashboard />}
-        {shown.page === "new" && (
-          <NewReferral open={(id) => go(`#/case/${id}`)} />
-        )}
-        {shown.page === "rules" && <Rules />}
+        <Suspense fallback={loading}>
+          {shown.page === "queue" && (
+            <Queue open={(id) => go(`#/case/${id}`)} />
+          )}
+          {shown.page === "case" && (
+            <CaseDetail
+              key={shown.id}
+              caseId={shown.id}
+              back={() => go("#/queue")}
+            />
+          )}
+          {shown.page === "dashboard" && <Dashboard />}
+          {shown.page === "new" && (
+            <NewReferral open={(id) => go(`#/case/${id}`)} />
+          )}
+          {shown.page === "rules" && <Rules />}
+        </Suspense>
       </div>
     </ReferralWorkspace>
   );

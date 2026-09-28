@@ -28,7 +28,7 @@ import {
 } from "../ui";
 
 /** Vertical scale of the time grid. */
-const PX_PER_MIN = 1.1;
+const PX_PER_MIN = 1.6;
 const BLOCK_REASONS = [
   "ADMIN",
   "MEETING",
@@ -360,7 +360,7 @@ export function Calendar({ route, go }: ViewProps) {
                   <button
                     key={a.id}
                     type="button"
-                    className={`calendar__appt calendar__appt--${a.status.toLowerCase()}`}
+                    className={`calendar__appt calendar__appt--${a.status.toLowerCase()}${height(a.starts_at, a.ends_at) < 36 ? " calendar__appt--short" : ""}`}
                     style={{
                       top: top(a.starts_at),
                       height: height(a.starts_at, a.ends_at),
@@ -375,11 +375,13 @@ export function Calendar({ route, go }: ViewProps) {
                     }}
                     aria-label={`${fmt.range(a.starts_at, a.ends_at, tz)}, ${a.patient.display_name}, ${a.appointment_type.name}, ${statusText(a.status)}`}
                   >
-                    <span className="calendar__appt-time">
-                      {fmt.time(a.starts_at, tz)}
-                    </span>
-                    <span className="calendar__appt-who">
-                      {a.patient.display_name}
+                    <span className="calendar__appt-line">
+                      <span className="calendar__appt-time">
+                        {fmt.time(a.starts_at, tz)}
+                      </span>{" "}
+                      <span className="calendar__appt-who">
+                        {a.patient.display_name}
+                      </span>
                     </span>
                     <span className="calendar__appt-what">
                       {a.appointment_type.name} · {statusText(a.status)}

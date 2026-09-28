@@ -361,53 +361,79 @@ export function SlotPicker({
       practice.tick,
     ],
   );
+  // One day at a time: a week of two practitioners' times is hundreds of
+  // buttons. The chosen day survives refreshes (it is kept by its label).
+  const [day, setDay] = useState<string | null>(null);
   if (error) return <ErrorNote error={error} />;
   if (!data) return <Loading what="available times" />;
-  if (!data.slots.length)
+  const byDay = new Map<string, Slot[]>();
+  // The held time is no longer available, so it drops out of refreshed
+  // results; keep showing it as the chosen one.
+  const same = (a: Slot, b: Slot) =>
+    a.start === b.start &&
+    a.practitioner_id === b.practitioner_id &&
+    a.location_id === b.location_id;
+  const shown =
+    selected && !data.slots.some((s) => same(s, selected))
+      ? [...data.slots, selected].sort(
+          (a, b) => Date.parse(a.start) - Date.parse(b.start),
+        )
+      : data.slots;
+  if (!shown.length)
     return (
       <Empty title="No available times in this window">
         Try later dates, another practitioner, or add the patient to the
         waitlist.
       </Empty>
     );
-  const byDay = new Map<string, Slot[]>();
-  for (const s of data.slots) {
-    const day = fmt.day(s.start, s.timezone);
-    byDay.set(day, [...(byDay.get(day) ?? []), s]);
+  for (const s of shown) {
+    const d = fmt.day(s.start, s.timezone);
+    byDay.set(d, [...(byDay.get(d) ?? []), s]);
   }
+  const dayList = [...byDay.entries()];
+  const wanted =
+    day ?? (selected ? fmt.day(selected.start, selected.timezone) : null);
+  const [current, slots] = dayList.find(([d]) => d === wanted) ?? dayList[0]!;
   return (
     <div className={`slots${loading ? " is-refreshing" : ""}`}>
-      {[...byDay.entries()].map(([day, slots]) => (
-        <section key={day} className="slots__day">
-          <h3 className="caps">{day}</h3>
-          <ul>
-            {slots.map((s) => {
-              const on =
-                selected?.start === s.start &&
-                selected.practitioner_id === s.practitioner_id &&
-                selected.location_id === s.location_id;
-              return (
-                <li key={`${s.practitioner_id}:${s.location_id}:${s.start}`}>
-                  <button
-                    type="button"
-                    className="slot"
-                    aria-pressed={on}
-                    onClick={() => onPick(s)}
-                  >
-                    <span className="slot__time">
-                      {fmt.time(s.start, s.timezone)}
-                    </span>
-                    <span className="slot__who">
-                      {s.practitioner_name}
-                      <span className="muted"> · {s.location_name}</span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
+      <div className="slot-days" role="group" aria-label="Day">
+        {dayList.map(([d, list]) => (
+          <button
+            key={d}
+            type="button"
+            aria-pressed={d === current}
+            onClick={() => setDay(d)}
+          >
+            <span className="slot-days__day">{d}</span>
+            <span className="slot-days__count">
+              {list.length} time{list.length === 1 ? "" : "s"}
+            </span>
+          </button>
+        ))}
+      </div>
+      <ul className="slots__list" aria-label={`Times on ${current}`}>
+        {slots.map((s) => {
+          const on = !!selected && same(selected, s);
+          return (
+            <li key={`${s.practitioner_id}:${s.location_id}:${s.start}`}>
+              <button
+                type="button"
+                className="slot"
+                aria-pressed={on}
+                onClick={() => onPick(s)}
+              >
+                <span className="slot__time">
+                  {fmt.time(s.start, s.timezone)}
+                </span>
+                <span className="slot__who">
+                  {s.practitioner_name}
+                  <span className="muted"> · {s.location_name}</span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

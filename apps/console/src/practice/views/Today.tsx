@@ -121,19 +121,21 @@ export function Today({ route }: ViewProps) {
         <Tile label="Completed" value={count("COMPLETED")} />
         <Tile label="No-shows" value={count("NO_SHOW")} tone="exception" />
       </section>
-      {attention.data && (
+      {attention.data && Object.values(attention.data).some((n) => !!n) && (
         <section className="attention-list" aria-label="Waiting for a person">
-          {attention.data.conversations !== null && (
+          {!!attention.data.conversations && (
             <a className="attention-list__item" href={link("conversations")}>
               <Icon name="message" />
               <span>
-                <strong>{attention.data.conversations}</strong> WhatsApp
-                conversation{attention.data.conversations === 1 ? "" : "s"} need
+                <strong>{attention.data.conversations}</strong> WhatsApp{" "}
+                {attention.data.conversations === 1
+                  ? "conversation needs"
+                  : "conversations need"}{" "}
                 reception
               </span>
             </a>
           )}
-          {attention.data.offers !== null && (
+          {!!attention.data.offers && (
             <a className="attention-list__item" href={link("waitlist")}>
               <Icon name="waitlist" />
               <span>
@@ -142,7 +144,7 @@ export function Today({ route }: ViewProps) {
               </span>
             </a>
           )}
-          {attention.data.referrals !== null && (
+          {!!attention.data.referrals && (
             <a
               className="attention-list__item"
               href={link("referrals", null, { status: "RECEIVED" })}

@@ -426,8 +426,9 @@ function Leave() {
                   <Tone tone={x.kind === "AVAILABLE" ? "booked" : "closed"}>
                     {x.kind === "AVAILABLE" ? "Extra session" : "Unavailable"}
                   </Tone>{" "}
-                  {label(x.reason_code)} · {fmt.when(x.starts_at, tz)} –{" "}
-                  {fmt.when(x.ends_at, tz)}
+                  {x.reason_code !== "EXTRA_SESSION" &&
+                    `${label(x.reason_code)} · `}
+                  {fmt.when(x.starts_at, tz)} – {fmt.when(x.ends_at, tz)}
                   {x.note && <span className="muted"> · {x.note}</span>}
                 </span>
                 {manage && (
@@ -723,7 +724,8 @@ function Types() {
                       style={{ background: t.calendar_color ?? undefined }}
                       aria-hidden
                     />
-                    {t.name} <span className="mono muted small">{t.code}</span>
+                    {t.name}
+                    <span className="mono muted small type-code">{t.code}</span>
                     {!t.active && (
                       <>
                         {" "}
