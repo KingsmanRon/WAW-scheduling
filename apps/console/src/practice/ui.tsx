@@ -187,6 +187,80 @@ export function useAction() {
   return { busy, error, setError, run };
 }
 
+/**
+ * A button for a change that removes or ends something. The first press
+ * asks in place ("Remove these hours?"); only the second, on the confirming
+ * button, acts. Focus moves to the confirming button, and Escape or "Keep"
+ * backs out.
+ */
+export function ConfirmButton({
+  label,
+  question,
+  confirmLabel = label,
+  onConfirm,
+  disabled = false,
+  className = "btn btn-quiet",
+}: {
+  label: string;
+  question: string;
+  confirmLabel?: string;
+  onConfirm: () => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const [asking, setAsking] = useState(false);
+  const confirm = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (asking) confirm.current?.focus();
+  }, [asking]);
+  if (!asking)
+    return (
+      <button
+        type="button"
+        className={className}
+        disabled={disabled}
+        onClick={() => setAsking(true)}
+      >
+        {label}
+      </button>
+    );
+  return (
+    <span
+      className="confirm"
+      role="group"
+      aria-label={question}
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        // Back out of the question only, not a dialog around it.
+        e.preventDefault();
+        e.stopPropagation();
+        setAsking(false);
+      }}
+    >
+      <span className="confirm__question">{question}</span>
+      <button
+        ref={confirm}
+        type="button"
+        className="btn btn-danger"
+        disabled={disabled}
+        onClick={() => {
+          setAsking(false);
+          onConfirm();
+        }}
+      >
+        {confirmLabel}
+      </button>
+      <button
+        type="button"
+        className="btn btn-secondary"
+        onClick={() => setAsking(false)}
+      >
+        Keep
+      </button>
+    </span>
+  );
+}
+
 export function ChannelSelect({
   id,
   value,

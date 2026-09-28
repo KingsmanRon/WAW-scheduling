@@ -14,6 +14,7 @@ import {
 } from "../time";
 import type { PatientSummary, Referral, WaitlistEntry } from "../types";
 import {
+  ConfirmButton,
   Dialog,
   Empty,
   ErrorNote,
@@ -604,11 +605,11 @@ export function Waitlist({ route }: ViewProps) {
                       )}
                       {manage &&
                         (w.status === "ACTIVE" || w.status === "OFFERED") && (
-                          <button
-                            type="button"
-                            className="btn btn-quiet"
+                          <ConfirmButton
+                            label="Remove"
+                            question="Take off the waitlist?"
                             disabled={action.busy}
-                            onClick={() =>
+                            onConfirm={() =>
                               void action.run(async () => {
                                 await practice.client.send(
                                   "POST",
@@ -618,9 +619,7 @@ export function Waitlist({ route }: ViewProps) {
                                 practice.changed();
                               })
                             }
-                          >
-                            Remove
-                          </button>
+                          />
                         )}
                     </div>
                   </td>

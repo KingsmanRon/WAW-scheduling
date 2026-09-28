@@ -8,6 +8,7 @@ import { useLink, type ViewProps } from "../PracticeApp";
 import { fmt } from "../time";
 import type { PatientDetail, PatientSummary, Referral } from "../types";
 import {
+  ConfirmButton,
   Dialog,
   Empty,
   ErrorNote,
@@ -603,16 +604,14 @@ function ReferralDialog({ id, onClose }: { id: string; onClose: () => void }) {
               )}
               {(r.status === "RECEIVED" || r.status === "VERIFIED") &&
                 !rejecting && (
-                  <button
-                    type="button"
-                    className="btn btn-quiet"
+                  <ConfirmButton
+                    label="Withdraw"
+                    question="Withdraw this referral?"
                     disabled={action.busy}
-                    onClick={() =>
+                    onConfirm={() =>
                       decide("cancel", { expected_version: r.version })
                     }
-                  >
-                    Withdraw
-                  </button>
+                  />
                 )}
             </div>
           )}

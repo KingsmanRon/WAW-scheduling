@@ -16,6 +16,7 @@ import {
 } from "../types";
 import {
   ChannelSelect,
+  ConfirmButton,
   Dialog,
   Empty,
   ErrorNote,
@@ -82,28 +83,38 @@ export function LifecycleButtons({
     });
   const shown = buttons.filter((b) => b.can);
   if (!shown.length) return null;
+  const run = (path: string) =>
+    void action.run(async () => {
+      await practice.client.send("POST", `/appointments/${a.id}/${path}`, {
+        expected_version: a.version,
+      });
+      practice.changed();
+    });
   return (
     <div className={`button-row${compact ? " button-row--compact" : ""}`}>
-      {shown.map((b) => (
-        <button
-          key={b.path}
-          type="button"
-          className={`btn${b.primary ? "" : " btn-secondary"}`}
-          disabled={action.busy}
-          onClick={() =>
-            void action.run(async () => {
-              await practice.client.send(
-                "POST",
-                `/appointments/${a.id}/${b.path}`,
-                { expected_version: a.version },
-              );
-              practice.changed();
-            })
-          }
-        >
-          {b.text}
-        </button>
-      ))}
+      {shown.map((b) =>
+        b.path === "no-show" ? (
+          <ConfirmButton
+            key={b.path}
+            label={b.text}
+            question="The patient did not come?"
+            confirmLabel="Mark no-show"
+            className="btn btn-secondary"
+            disabled={action.busy}
+            onConfirm={() => run(b.path)}
+          />
+        ) : (
+          <button
+            key={b.path}
+            type="button"
+            className={`btn${b.primary ? "" : " btn-secondary"}`}
+            disabled={action.busy}
+            onClick={() => run(b.path)}
+          >
+            {b.text}
+          </button>
+        ),
+      )}
     </div>
   );
 }

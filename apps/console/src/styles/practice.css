@@ -82,7 +82,19 @@ a.rail__brand {
   align-items: center;
   gap: var(--s-2);
 }
-.button-row--compact .btn {
+.confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+.confirm__question {
+  color: var(--c-ink);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+.button-row--compact .btn,
+.table td .confirm .btn {
   min-height: 34px;
   padding: 0 var(--s-3);
   font-size: var(--t-sm);

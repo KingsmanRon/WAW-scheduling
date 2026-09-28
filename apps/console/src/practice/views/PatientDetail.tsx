@@ -13,6 +13,7 @@ import type {
   WaitlistEntry,
 } from "../types";
 import {
+  ConfirmButton,
   Dialog,
   Empty,
   ErrorNote,
@@ -212,11 +213,11 @@ export function PatientDetail({ route }: ViewProps) {
                       </span>
                     </span>
                     {canWrite && (
-                      <button
-                        type="button"
-                        className="btn btn-quiet"
+                      <ConfirmButton
+                        label="Remove"
+                        question="Remove this contact?"
                         disabled={remove.busy}
-                        onClick={() =>
+                        onConfirm={() =>
                           void remove.run(async () => {
                             await practice.client.send(
                               "POST",
@@ -226,9 +227,7 @@ export function PatientDetail({ route }: ViewProps) {
                             await patient.reload();
                           })
                         }
-                      >
-                        Remove
-                      </button>
+                      />
                     )}
                   </li>
                 ))}

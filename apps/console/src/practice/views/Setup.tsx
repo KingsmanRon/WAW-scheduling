@@ -22,6 +22,7 @@ import type {
   Practitioner,
 } from "../types";
 import {
+  ConfirmButton,
   Dialog,
   Empty,
   ErrorNote,
@@ -192,11 +193,11 @@ function Hours() {
                   </td>
                   <td>
                     {manage && (
-                      <button
-                        type="button"
-                        className="btn btn-quiet"
+                      <ConfirmButton
+                        label="Remove"
+                        question="Remove these hours?"
                         disabled={action.busy}
-                        onClick={() =>
+                        onConfirm={() =>
                           void action.run(async () => {
                             await practice.client.send(
                               "POST",
@@ -206,9 +207,7 @@ function Hours() {
                             practice.changed();
                           })
                         }
-                      >
-                        Remove
-                      </button>
+                      />
                     )}
                   </td>
                 </tr>
@@ -432,11 +431,11 @@ function Leave() {
                   {x.note && <span className="muted"> · {x.note}</span>}
                 </span>
                 {manage && (
-                  <button
-                    type="button"
-                    className="btn btn-quiet"
+                  <ConfirmButton
+                    label="Remove"
+                    question="Remove this entry?"
                     disabled={action.busy}
-                    onClick={() =>
+                    onConfirm={() =>
                       void action.run(async () => {
                         await practice.client.send(
                           "POST",
@@ -446,9 +445,7 @@ function Leave() {
                         practice.changed();
                       })
                     }
-                  >
-                    Remove
-                  </button>
+                  />
                 )}
               </li>
             ))}

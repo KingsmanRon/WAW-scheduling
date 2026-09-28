@@ -15,6 +15,7 @@ import {
   newPatient,
   newPractice,
   slot,
+  TZ,
   type TestPractice,
 } from "../support/scheduling.js";
 
@@ -435,6 +436,136 @@ describe.runIf(databaseEnabled)("practice scheduling API (JWT)", () => {
     expect((await block(p.practitionerIds[0])).statusCode).toBe(201);
   });
 
+  it("removes working hours, leave and blocks, reopening exactly the time they closed", async () => {
+    const who = p.practitionerIds[1];
+    const at = (hhmm: string) => slot(9, hhmm);
+    const offered = async (): Promise<string[]> =>
+      (
+        await call(
+          "GET",
+          path(
+            p,
+            `/availability?appointment_type_id=${p.typeId}&practitioner_id=${who}` +
+              `&from=${encodeURIComponent(at("00:00").toISOString())}` +
+              `&to=${encodeURIComponent(at("23:30").toISOString())}`,
+          ),
+          "READ_ONLY",
+        )
+      )
+        .json()
+        .slots.map((s: { start: string }) => s.start);
+    const remove = (kind: string, id: string, body: object = {}) =>
+      call("POST", path(p, `/${kind}/${id}/remove`), "PRACTICE_ADMIN", body);
+    const initial = await offered();
+    expect(initial).toContain(at("09:00").toISOString());
+    expect(initial).not.toContain(at("18:00").toISOString());
+
+    // Evening hours on that weekday, then removed.
+    const weekday =
+      ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(
+        new Intl.DateTimeFormat("en-US", {
+          timeZone: TZ,
+          weekday: "short",
+        }).format(at("12:00")),
+      ) + 1;
+    const hours = await call(
+      "POST",
+      path(p, "/availability-rules"),
+      "PRACTICE_ADMIN",
+      {
+        practitioner_id: who,
+        location_id: p.locationId,
+        weekday,
+        start_minute: 17 * 60,
+        end_minute: 19 * 60,
+        valid_from: "2026-01-01",
+      },
+    );
+    expect(hours.statusCode).toBe(201);
+    const ruleId = hours.json().availability_rule.id as string;
+    expect(await offered()).toContain(at("18:00").toISOString());
+    expect((await remove("availability-rules", ruleId)).statusCode).toBe(200);
+    expect(await offered()).toEqual(initial);
+
+    // A block, then removed with a reason.
+    const block = await call(
+      "POST",
+      path(p, "/schedule-blocks"),
+      "PRACTICE_ADMIN",
+      {
+        practitioner_id: who,
+        reason_code: "MEETING",
+        start: at("09:00").toISOString(),
+        end: at("10:00").toISOString(),
+      },
+    );
+    expect(block.statusCode).toBe(201);
+    const blockId = block.json().schedule_block.id as string;
+    expect(await offered()).not.toContain(at("09:30").toISOString());
+    expect(
+      (
+        await remove("schedule-blocks", blockId, {
+          reason: "Meeting moved",
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(await offered()).toEqual(initial);
+
+    // A day of leave, then removed.
+    const leave = await call(
+      "POST",
+      path(p, "/availability-exceptions"),
+      "PRACTICE_ADMIN",
+      {
+        practitioner_id: who,
+        kind: "UNAVAILABLE",
+        reason_code: "LEAVE",
+        start: at("00:00").toISOString(),
+        end: slot(10, "00:00").toISOString(),
+      },
+    );
+    expect(leave.statusCode).toBe(201);
+    const leaveId = leave.json().availability_exception.id as string;
+    expect(await offered()).toEqual([]);
+    expect((await remove("availability-exceptions", leaveId)).statusCode).toBe(
+      200,
+    );
+    expect(await offered()).toEqual(initial);
+
+    // A removal is final; the rows themselves stay unchangeable.
+    const again = await remove("schedule-blocks", blockId);
+    expect(again.statusCode).toBe(404);
+    expect(again.json().error).toBe("CONFIGURATION_NOT_FOUND");
+    await expect(
+      ownerPool().query(
+        "UPDATE scheduling.availability_rules SET end_minute = end_minute + 30 WHERE id = $1",
+        [ruleId],
+      ),
+    ).rejects.toThrow(/removed availability_rules row is final/);
+    const trail = await ownerPool().query(
+      `SELECT action, resource_id, actor_id FROM platform.audit_events
+        WHERE tenant_id = $1 AND action LIKE '%.removed' ORDER BY id`,
+      [p.tenantId],
+    );
+    expect(trail.rows).toEqual([
+      {
+        action: "availability_rule.removed",
+        resource_id: ruleId,
+        actor_id: `user:${users.PRACTICE_ADMIN}`,
+      },
+      {
+        action: "schedule_block.removed",
+        resource_id: blockId,
+        actor_id: `user:${users.PRACTICE_ADMIN}`,
+      },
+      {
+        action: "availability_exception.removed",
+        resource_id: leaveId,
+        actor_id: `user:${users.PRACTICE_ADMIN}`,
+      },
+    ]);
+  });
+
   it("stops a receptionist from raising their own privileges, in the API and in the database", async () => {
     const escalate = await call(
       "PUT",
@@ -650,5 +781,34 @@ describe.runIf(databaseEnabled)("practice scheduling API (JWT)", () => {
       "DOCTOR",
     );
     expect(byName.json().items).toHaveLength(1);
+
+    // A second number is added, then removed: search no longer finds it.
+    const patientId = created.json().patient.id as string;
+    const added = await call(
+      "POST",
+      path(p, `/patients/${patientId}/contacts`),
+      "RECEPTIONIST",
+      { kind: "MOBILE", value: "082 555 7799" },
+    );
+    expect(added.statusCode).toBe(201);
+    const second = (
+      added.json().patient.contacts as { id: string; value: string }[]
+    ).find((x) => x.value === "+27825557799")!;
+    const removed = await call(
+      "POST",
+      path(p, `/patients/${patientId}/contacts/${second.id}/remove`),
+      "RECEPTIONIST",
+      {},
+    );
+    expect(removed.statusCode).toBe(200);
+    expect(
+      (removed.json().patient.contacts as { id: string }[]).map((x) => x.id),
+    ).not.toContain(second.id);
+    const gone = await call(
+      "GET",
+      path(p, "/patients?mobile=%2B27825557799"),
+      "RECEPTIONIST",
+    );
+    expect(gone.json().items).toEqual([]);
   });
 });

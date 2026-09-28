@@ -63,9 +63,28 @@ test("blocking time over a booked appointment asks first, keeps the appointment 
     actor_id: "synthetic:nomsa",
     action: "schedule_block.created",
   });
+
+  // Removing the block asks first; Escape backs out of the question only.
+  await page.getByRole("button", { name: /^Blocked / }).click();
+  const detail = page.getByRole("dialog", { name: "Blocked time" });
+  await detail.getByRole("button", { name: "Remove block" }).click();
+  await expect(detail).toContainText("Make this time bookable again?");
+  await page.keyboard.press("Escape");
+  await expect(detail).not.toContainText("Make this time bookable again?");
+  await expect(detail).toBeVisible();
+  await detail.getByRole("button", { name: "Remove block" }).click();
+  await detail.getByRole("button", { name: "Remove block" }).click();
+  await expect(detail).toBeHidden();
+  await expect(page.getByText("Blocked · Meeting")).toBeHidden();
+  const reopened = (await slotsOn(day, "Dr Lindiwe Nkosi")).filter(
+    (s) =>
+      Date.parse(s.start) >= start.toMillis() &&
+      Date.parse(s.start) < start.plus({ hours: 1 }).toMillis(),
+  );
+  expect(reopened.length).toBeGreaterThan(0);
 });
 
-test("leave entered in schedule setup removes the practitioner's times", async ({
+test("leave entered in schedule setup removes the practitioner's times until it is removed", async ({
   page,
 }) => {
   const day = await practiceDate(3);
@@ -86,4 +105,18 @@ test("leave entered in schedule setup removes the practitioner's times", async (
   await expect(page.getByText(/Unavailable\s+Leave/)).toBeVisible();
 
   expect(await offered()).toBe(0);
+
+  // Removing it asks first: "Keep" leaves it in place.
+  const entry = page
+    .getByRole("listitem")
+    .filter({ hasText: /Unavailable\s+Leave/ });
+  await entry.getByRole("button", { name: "Remove" }).click();
+  await expect(entry).toContainText("Remove this entry?");
+  await entry.getByRole("button", { name: "Keep" }).click();
+  await expect(entry).not.toContainText("Remove this entry?");
+  expect(await offered()).toBe(0);
+  await entry.getByRole("button", { name: "Remove" }).click();
+  await entry.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByText(/Unavailable\s+Leave/)).toBeHidden();
+  expect(await offered()).toBeGreaterThan(0);
 });

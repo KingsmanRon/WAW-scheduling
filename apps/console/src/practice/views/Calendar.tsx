@@ -19,6 +19,7 @@ import {
 } from "../time";
 import type { Appointment, CalendarData, Period } from "../types";
 import {
+  ConfirmButton,
   Dialog,
   ErrorNote,
   Loading,
@@ -663,11 +664,12 @@ function BlockDetail({
           Close
         </button>
         {practice.can("schedule.blocks.manage") && (
-          <button
-            type="button"
-            className="btn btn-danger"
+          <ConfirmButton
+            label="Remove block"
+            question="Make this time bookable again?"
+            className="btn btn-secondary"
             disabled={action.busy}
-            onClick={() =>
+            onConfirm={() =>
               void action
                 .run(async () => {
                   await practice.client.send(
@@ -679,9 +681,7 @@ function BlockDetail({
                 })
                 .then((ok) => ok && onClose())
             }
-          >
-            Remove block
-          </button>
+          />
         )}
       </div>
     </Dialog>
