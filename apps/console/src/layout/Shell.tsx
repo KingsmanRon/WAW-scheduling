@@ -1,49 +1,28 @@
 import React from "react";
 import { DataMode } from "../components/DataMode";
 import { Icon, type IconName } from "../components/Icon";
-import { label, roleLabel, shortId } from "../format";
 import { clearQueueCache } from "../queueCache";
-import { useSession, type Me } from "../session";
+import { useSession } from "../session";
 
-export type NavKey = "queue" | "dashboard" | "new" | "rules";
-const NAV: {
-  key: NavKey;
+/** One destination in the rail (and the phone tab bar). */
+export interface NavItem {
+  key: string;
   hash: string;
   text: string;
   short: string;
   icon: IconName;
-}[] = [
-  {
-    key: "queue",
-    hash: "#/queue",
-    text: "Queue",
-    short: "Queue",
-    icon: "queue",
-  },
-  {
-    key: "dashboard",
-    hash: "#/dashboard",
-    text: "Dashboard",
-    short: "Dashboard",
-    icon: "dashboard",
-  },
-  {
-    key: "new",
-    hash: "#/new",
-    text: "New referral",
-    short: "New",
-    icon: "plus",
-  },
-  {
-    key: "rules",
-    hash: "#/rules",
-    text: "Rules",
-    short: "Rules",
-    icon: "rules",
-  },
-];
-const visibleNav = (me: Me) =>
-  NAV.filter((n) => n.key !== "new" || me.role !== "READ_ONLY");
+  /** Items waiting for a person (shown as a count). */
+  count?: number | undefined;
+  /** Shown in the rail only (the phone tab bar keeps the first five). */
+  railOnly?: boolean | undefined;
+}
+/** A line of the "who and where" block at the foot of the rail. */
+export interface ContextItem {
+  label: string;
+  value: string;
+  title?: string | undefined;
+  mono?: boolean | undefined;
+}
 
 /** The Access Line reduced to a mark: a line of stations ending in a gate. */
 export function AccessMark({ size = 28 }: { size?: number }) {
@@ -72,47 +51,58 @@ export function AccessMark({ size = 28 }: { size?: number }) {
   );
 }
 
-const SHORT_ROLE: Record<Me["role"], string> = {
-  ADMIN: "Admin",
-  PRACTICE_MANAGER: "Manager",
-  REFERRAL_COORDINATOR: "Coordinator",
-  READ_ONLY: "Read-only",
-};
-
-function Context({ me }: { me: Me }) {
+function Context({ items }: { items: ContextItem[] }) {
   return (
     <dl className="context">
-      <div>
-        <dt>Organisation</dt>
-        <dd className="mono" title={me.tenant_id}>
-          {shortId(me.tenant_id)}
-        </dd>
-      </div>
-      <div>
-        <dt>Role</dt>
-        <dd>{roleLabel(me.role)}</dd>
-      </div>
-      <div>
-        <dt>Environment</dt>
-        <dd>
-          {label(me.profile)} ·{" "}
-          {me.auth_mode === "jwt" ? "Signed in" : "Synthetic sign-in"}
-        </dd>
-      </div>
+      {items.map((item) => (
+        <div key={item.label}>
+          <dt>{item.label}</dt>
+          <dd className={item.mono ? "mono" : undefined} title={item.title}>
+            {item.value}
+          </dd>
+        </div>
+      ))}
     </dl>
   );
 }
 
+function Count({ n }: { n: number | undefined }) {
+  if (!n) return null;
+  return (
+    <span className="nav-count" aria-label={`${n} waiting`}>
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+}
+
+/**
+ * The operating shell: a night rail with the workspace's destinations and
+ * who/where the operator is, a top bar and tab bar on phones.
+ */
 export function Shell({
+  nav,
   active,
+  subtitle,
+  context,
+  compact,
+  home,
+  switchTo,
   children,
 }: {
-  active: NavKey;
+  nav: NavItem[];
+  active: string;
+  subtitle: string;
+  context: ContextItem[];
+  /** The rail's compact form: two short lines. */
+  compact: [string, string];
+  /** Where the brand mark leads. */
+  home: string;
+  /** Another workspace or practice the operator may switch to. */
+  switchTo?: { hash: string; label: string } | undefined;
   children: React.ReactNode;
 }) {
   const session = useSession();
   const me = session.me!;
-  const nav = visibleNav(me);
   const signOut = () => {
     clearQueueCache();
     void session.signOut();
@@ -122,17 +112,18 @@ export function Shell({
     e.preventDefault();
     document.getElementById("main")?.focus();
   };
+  const tabs = nav.filter((n) => !n.railOnly).slice(0, 5);
   return (
     <div className="app">
       <a className="skip-link" href="#main" onClick={skip}>
         Skip to content
       </a>
       <aside className="rail night">
-        <div className="rail__brand">
+        <a className="rail__brand" href={home}>
           <AccessMark />
           <span className="rail__word">ACCESS</span>
-          <span className="rail__sub">Referral operations</span>
-        </div>
+          <span className="rail__sub">{subtitle}</span>
+        </a>
         <DataMode mode={me.data_mode} />
         <nav className="rail__nav" aria-label="Primary">
           <ul>
@@ -145,19 +136,24 @@ export function Shell({
                   <Icon name={n.icon} />
                   <span className="rail__text">{n.text}</span>
                   <span className="rail__short">{n.short}</span>
+                  <Count n={n.count} />
                 </a>
               </li>
             ))}
           </ul>
         </nav>
         <div className="rail__foot">
-          <Context me={me} />
+          <Context items={context} />
           <p className="rail__compact-context">
-            <span>{SHORT_ROLE[me.role] ?? roleLabel(me.role)}</span>
-            <span className="mono" title={me.tenant_id}>
-              {shortId(me.tenant_id)}
-            </span>
+            <span>{compact[0]}</span>
+            <span>{compact[1]}</span>
           </p>
+          {switchTo && (
+            <a className="rail__switch" href={switchTo.hash}>
+              <Icon name="swap" />
+              <span>{switchTo.label}</span>
+            </a>
+          )}
           <button
             type="button"
             className="rail__signout"
@@ -171,7 +167,7 @@ export function Shell({
       </aside>
 
       <header className="topbar night">
-        <a className="topbar__brand" href="#/queue">
+        <a className="topbar__brand" href={home}>
           <AccessMark size={26} />
           <span>ACCESS</span>
         </a>
@@ -181,7 +177,22 @@ export function Shell({
             <Icon name="account" />
           </summary>
           <div className="account__panel">
-            <Context me={me} />
+            <Context items={context} />
+            {nav
+              .filter((n) => !tabs.includes(n))
+              .map((n) => (
+                <a key={n.key} className="account__link" href={n.hash}>
+                  <Icon name={n.icon} />
+                  {n.text}
+                  <Count n={n.count} />
+                </a>
+              ))}
+            {switchTo && (
+              <a className="account__link" href={switchTo.hash}>
+                <Icon name="swap" />
+                {switchTo.label}
+              </a>
+            )}
             <button
               type="button"
               className="btn btn-secondary"
@@ -200,7 +211,7 @@ export function Shell({
 
       <nav className="tabbar" aria-label="Primary">
         <ul>
-          {nav.map((n) => (
+          {tabs.map((n) => (
             <li key={n.key}>
               <a
                 href={n.hash}
@@ -208,6 +219,7 @@ export function Shell({
               >
                 <Icon name={n.icon} />
                 <span>{n.short}</span>
+                <Count n={n.count} />
               </a>
             </li>
           ))}

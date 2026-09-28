@@ -2,7 +2,13 @@ import React, { useState } from "react";
 import { Icon } from "../components/Icon";
 import { LoginScene } from "../components/LoginScene";
 import { AccessMark } from "../layout/Shell";
-import { AUTH_MODE, supabaseClient, useSession, type Me } from "../session";
+import {
+  AUTH_MODE,
+  supabaseClient,
+  useSession,
+  type OrgRole,
+  type PracticeRole,
+} from "../session";
 
 export function Login() {
   const session = useSession();
@@ -11,7 +17,9 @@ export function Login() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [tenant, setTenant] = useState("11111111-1111-4111-8111-111111111111");
-  const [role, setRole] = useState<Me["role"]>("REFERRAL_COORDINATOR");
+  const [role, setRole] = useState<OrgRole>("REFERRAL_COORDINATOR");
+  const [practiceRole, setPracticeRole] =
+    useState<PracticeRole>("RECEPTIONIST");
   const [user, setUser] = useState("coordinator");
 
   const panel =
@@ -23,7 +31,7 @@ export function Login() {
         <p className="signin__warning">
           <Icon name="shield" size={18} />
           <span>
-            Synthetic development mode. Tenant and role are asserted by the
+            Synthetic development mode. Tenant and roles are asserted by the
             browser and are refused by client-pilot and production deployments.
             Use synthetic data only.
           </span>
@@ -32,7 +40,7 @@ export function Login() {
           className="signin__form"
           onSubmit={(e) => {
             e.preventDefault();
-            session.signInSynthetic({ tenant, role, user });
+            session.signInSynthetic({ tenant, role, practiceRole, user });
           }}
         >
           <div className="field">
@@ -45,11 +53,27 @@ export function Login() {
             />
           </div>
           <div className="field">
-            <label htmlFor="synthetic-role">Role</label>
+            <label htmlFor="synthetic-practice-role">Practice role</label>
+            <select
+              id="synthetic-practice-role"
+              value={practiceRole}
+              onChange={(e) => setPracticeRole(e.target.value as PracticeRole)}
+            >
+              <option value="RECEPTIONIST">Receptionist</option>
+              <option value="DOCTOR">Doctor</option>
+              <option value="CLINICAL_STAFF">Clinical staff</option>
+              <option value="PRACTICE_ADMIN">Practice admin</option>
+              <option value="READ_ONLY">Read-only</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="synthetic-role">
+              Organisation role (referral operations)
+            </label>
             <select
               id="synthetic-role"
               value={role}
-              onChange={(e) => setRole(e.target.value as Me["role"])}
+              onChange={(e) => setRole(e.target.value as OrgRole)}
             >
               <option>REFERRAL_COORDINATOR</option>
               <option>PRACTICE_MANAGER</option>

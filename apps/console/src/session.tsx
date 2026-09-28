@@ -27,17 +27,34 @@ export function supabaseClient(): SupabaseClient {
   return supabase;
 }
 
-export interface Me {
-  user_id: string;
+export type OrgRole =
+  "ADMIN" | "PRACTICE_MANAGER" | "REFERRAL_COORDINATOR" | "READ_ONLY";
+export type PracticeRole =
+  "PRACTICE_ADMIN" | "DOCTOR" | "RECEPTIONIST" | "CLINICAL_STAFF" | "READ_ONLY";
+/** A practice the signed-in user works in (resolved by the API). */
+export interface PracticeMembership {
+  practice_id: string;
   tenant_id: string;
-  role: "ADMIN" | "PRACTICE_MANAGER" | "REFERRAL_COORDINATOR" | "READ_ONLY";
+  name: string;
+  timezone: string;
+  role: PracticeRole;
+  display_name: string;
+  practitioner_id: string | null;
+}
+export interface Me {
+  /** Organisation membership (referral operations); absent for practice-only staff. */
+  user_id: string | null;
+  tenant_id: string | null;
+  role: OrgRole | null;
   auth_mode: "jwt" | "synthetic";
   profile: string;
   data_mode: string;
+  practices: PracticeMembership[];
 }
 export interface SyntheticIdentity {
   tenant: string;
-  role: Me["role"];
+  role: OrgRole;
+  practiceRole: PracticeRole;
   user: string;
 }
 interface Session {
@@ -89,6 +106,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       } else if (synthetic) {
         h["x-tenant-id"] = synthetic.tenant;
         h["x-access-role"] = synthetic.role;
+        h["x-practice-role"] = synthetic.practiceRole ?? "RECEPTIONIST";
         h["x-access-user"] = synthetic.user;
       }
       return h;
@@ -156,7 +174,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setError("");
-      setMe(body);
+      setMe({ ...body, practices: body.practices ?? [] });
     })();
     return () => {
       cancelled = true;
