@@ -245,6 +245,8 @@ export interface ApiConfig extends Common {
   identifierHash: { key: Buffer; keyId: string };
   /** Bearer token protecting GET /metrics (required in secure profiles). */
   metricsToken: string | undefined;
+  /** Local profile only: EMR webhooks to http:// or private addresses. */
+  integrations: { allowPrivateTargets: boolean };
 }
 
 function positiveInt(
@@ -363,11 +365,18 @@ export function loadApiConfig(env: Env = process.env): ApiConfig {
     buildId: env.BUILD_ID ?? "dev",
     identifierHash: identifierHashKey(env, c, problems),
     metricsToken: env.METRICS_TOKEN || undefined,
+    integrations: {
+      allowPrivateTargets: env.INTEGRATION_ALLOW_PRIVATE_TARGETS === "true",
+    },
   };
   if (config.metricsToken !== undefined && config.metricsToken.length < 32)
     problems.push("METRICS_TOKEN must be at least 32 characters");
   if (c.secure && !config.metricsToken)
     problems.push(`${c.profile} requires METRICS_TOKEN to protect /metrics`);
+  if (config.integrations.allowPrivateTargets && c.profile !== "local")
+    problems.push(
+      "INTEGRATION_ALLOW_PRIVATE_TARGETS is only permitted in the local profile",
+    );
   if (problems.length) throw new ConfigError(problems);
   return config;
 }
@@ -386,6 +395,84 @@ export interface WorkerConfig extends Common {
   reconcileBaseSeconds: number;
   pollMs: number;
   tenantIds: string[] | undefined;
+  /** Health, readiness and metrics HTTP port (Railway sets PORT). */
+  port: number;
+  buildId: string;
+  metricsToken: string | undefined;
+  whatsapp: { graphBaseUrl: string; apiVersion: string; timeoutMs: number };
+  smtp: {
+    url: string;
+    from: string;
+    requireTls: boolean;
+    timeoutMs: number;
+  } | null;
+  notifications: {
+    /**
+     * Synthetic-data environments message only these recipients (E.164
+     * numbers, e-mail addresses); null means no restriction (REAL data).
+     */
+    allowList: ReadonlySet<string> | null;
+    leaseSeconds: number;
+    batchSize: number;
+  };
+  integrations: { allowPrivateTargets: boolean; timeoutMs: number };
+  outboxMaxAttempts: number;
+  retention: {
+    deliveryContentDays: number;
+    channelMessageDays: number;
+    integrationPayloadDays: number;
+  };
+}
+const E164 = /^\+[1-9][0-9]{6,14}$/;
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+function recipientAllowList(
+  env: Env,
+  c: Common,
+  problems: string[],
+): ReadonlySet<string> | null {
+  const raw = env.NOTIFICATION_RECIPIENT_ALLOWLIST;
+  const entries = (raw ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => (s.includes("@") ? s.toLowerCase() : s));
+  for (const e of entries)
+    if (!E164.test(e) && !EMAIL.test(e))
+      problems.push(
+        "NOTIFICATION_RECIPIENT_ALLOWLIST entries must be E.164 numbers or e-mail addresses",
+      );
+  // Synthetic patients may carry real people's numbers by accident: only
+  // explicitly listed test recipients are ever messaged.
+  if (c.dataMode === "SYNTHETIC") return new Set(entries);
+  return raw === undefined || raw === "" ? null : new Set(entries);
+}
+function smtpConfig(
+  env: Env,
+  c: Common,
+  problems: string[],
+): WorkerConfig["smtp"] {
+  const url = env.SMTP_URL;
+  const from = env.SMTP_FROM;
+  if (!url && !from) return null;
+  if (!url || !from) {
+    problems.push("SMTP_URL and SMTP_FROM must be set together");
+    return null;
+  }
+  if (!/^smtps?:\/\//.test(url))
+    problems.push("SMTP_URL must use smtp:// or smtps://");
+  if (!/<[^@\s]+@[^@\s]+>$|^[^@\s<>]+@[^@\s<>]+$/.test(from.trim()))
+    problems.push('SMTP_FROM must be an address or "Name <address>"');
+  const requireTls = env.SMTP_REQUIRE_TLS !== "false";
+  if (!requireTls && c.profile !== "local")
+    problems.push(
+      "SMTP_REQUIRE_TLS=false is only permitted in the local profile",
+    );
+  return {
+    url,
+    from: from.trim(),
+    requireTls,
+    timeoutMs: positiveInt(env, "SMTP_TIMEOUT_MS", 15_000, 120_000, problems),
+  };
 }
 /** Capabilities each connector implementation has actually qualified. */
 export const CONNECTOR_IMPLEMENTED: Record<
@@ -475,7 +562,92 @@ export function loadWorkerConfig(env: Env = process.env): WorkerConfig {
       positiveInt(env, "WORKER_POLL_MS", 250, 60_000, problems),
     ),
     tenantIds: tenantIds?.length ? tenantIds : undefined,
+    port: positiveInt(env, "PORT", 8081, 65535, problems),
+    buildId: env.BUILD_ID ?? "dev",
+    metricsToken: env.METRICS_TOKEN || undefined,
+    whatsapp: {
+      graphBaseUrl: (
+        env.WHATSAPP_GRAPH_BASE_URL ?? "https://graph.facebook.com"
+      ).replace(/\/+$/, ""),
+      apiVersion: env.WHATSAPP_API_VERSION ?? "v23.0",
+      timeoutMs: positiveInt(
+        env,
+        "WHATSAPP_TIMEOUT_MS",
+        10_000,
+        60_000,
+        problems,
+      ),
+    },
+    smtp: smtpConfig(env, c, problems),
+    notifications: {
+      allowList: recipientAllowList(env, c, problems),
+      leaseSeconds: Math.max(
+        15,
+        positiveInt(env, "NOTIFICATION_LEASE_SECONDS", 60, 900, problems),
+      ),
+      batchSize: Math.max(
+        1,
+        positiveInt(env, "NOTIFICATION_BATCH_SIZE", 10, 200, problems),
+      ),
+    },
+    integrations: {
+      allowPrivateTargets: env.INTEGRATION_ALLOW_PRIVATE_TARGETS === "true",
+      timeoutMs: positiveInt(
+        env,
+        "INTEGRATION_TIMEOUT_MS",
+        10_000,
+        60_000,
+        problems,
+      ),
+    },
+    outboxMaxAttempts: Math.max(
+      1,
+      positiveInt(env, "OUTBOX_MAX_ATTEMPTS", 10, 50, problems),
+    ),
+    retention: {
+      deliveryContentDays: Math.max(
+        7,
+        positiveInt(
+          env,
+          "NOTIFICATION_CONTENT_RETENTION_DAYS",
+          90,
+          3650,
+          problems,
+        ),
+      ),
+      channelMessageDays: Math.max(
+        7,
+        positiveInt(env, "CHANNEL_MESSAGE_RETENTION_DAYS", 90, 3650, problems),
+      ),
+      integrationPayloadDays: Math.max(
+        1,
+        positiveInt(
+          env,
+          "INTEGRATION_PAYLOAD_RETENTION_DAYS",
+          30,
+          3650,
+          problems,
+        ),
+      ),
+    },
   };
+  if (!/^v\d{1,3}\.\d{1,2}$/.test(config.whatsapp.apiVersion))
+    problems.push("WHATSAPP_API_VERSION must look like v23.0");
+  if (
+    c.profile !== "local" &&
+    !config.whatsapp.graphBaseUrl.startsWith("https://")
+  )
+    problems.push(
+      "WHATSAPP_GRAPH_BASE_URL must be https outside the local profile",
+    );
+  if (config.integrations.allowPrivateTargets && c.profile !== "local")
+    problems.push(
+      "INTEGRATION_ALLOW_PRIVATE_TARGETS is only permitted in the local profile",
+    );
+  if (config.metricsToken !== undefined && config.metricsToken.length < 32)
+    problems.push("METRICS_TOKEN must be at least 32 characters");
+  if (c.secure && !config.metricsToken)
+    problems.push(`${c.profile} requires METRICS_TOKEN to protect /metrics`);
   if (
     c.secure &&
     env.CONNECTOR_FAULT_MODE &&

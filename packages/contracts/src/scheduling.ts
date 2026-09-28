@@ -117,3 +117,21 @@ export const NOTIFICATION_STATUSES = [
   "SKIPPED",
 ] as const;
 export type NotificationStatus = (typeof NOTIFICATION_STATUSES)[number];
+
+/** Appointment events an EMR / practice system can subscribe to. */
+export const EMR_EVENT_TYPES = [
+  "appointment.confirmed",
+  "appointment.rescheduled",
+  "appointment.cancelled",
+  "appointment.checked_in",
+  "appointment.started",
+  "appointment.completed",
+  "appointment.no_show",
+] as const;
+export type EmrEventType = (typeof EMR_EVENT_TYPES)[number];
+export const INTEGRATION_EVENT_STATUSES = [
+  "PENDING",
+  "PROCESSING",
+  "DELIVERED",
+  "FAILED",
+] as const;

@@ -30,6 +30,7 @@ describe("migration discovery", () => {
       "0009_scheduling_core",
       "0010_messaging_and_integrations",
       "0011_retire_appointment_operations",
+      "0012_notification_worker",
     ]);
     for (const f of files) expect(f.checksum).toMatch(/^[0-9a-f]{64}$/);
   });

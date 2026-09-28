@@ -29,9 +29,11 @@
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@types/node": "^20.19.17",
+    "@types/smtp-server": "^3.5.13",
     "concurrently": "^9.2.1",
     "eslint": "^9.36.0",
     "prettier": "^3.6.2",
+    "smtp-server": "^3.19.14",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.44.0",

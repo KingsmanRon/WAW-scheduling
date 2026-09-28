@@ -32,16 +32,16 @@ jobs:
         run: npm run lint
       - name: Typecheck (runtime and tests)
         run: npm run typecheck
-      - name: Unit tests (availability engine, scheduling rules, patients, lifecycle, rules, policy, config, storage, scanner, logging, migrations, connector faults)
+      - name: Unit tests (availability engine, scheduling rules, patients, integrations, notification selection, lifecycle, rules, policy, config, storage, scanner, logging, migrations, connector faults)
         run: npx vitest run --project unit --reporter=verbose --reporter=json --outputFile.json=unit-report.json
       - name: Assert unit suite ran without skips
-        run: node scripts/assert-test-report.mjs unit-report.json 112
-      - name: PostgreSQL integration (migrations, RLS, scheduling core, concurrency, practice API, patients, dispatcher, ambiguity, poison, idempotency, outcomes, metrics, rules, artifacts, auth/tenancy, acceptance 1-29, E2E flows A-I)
+        run: node scripts/assert-test-report.mjs unit-report.json 128
+      - name: PostgreSQL integration (migrations, RLS, scheduling core, concurrency, practice API, patients, worker outbox/notifications/EMR webhooks, dispatcher, ambiguity, poison, idempotency, outcomes, metrics, rules, artifacts, auth/tenancy, acceptance 1-29, E2E flows A-I)
         env:
           QUALIFICATION_REPORT: qualification-report.json
         run: npx vitest run --project integration --reporter=verbose --reporter=json --outputFile.json=integration-report.json
       - name: Assert integration suites ran without skips
-        run: node scripts/assert-test-report.mjs integration-report.json 134
+        run: node scripts/assert-test-report.mjs integration-report.json 155
       - name: Build
         run: npm run build
       - name: Install Bicep

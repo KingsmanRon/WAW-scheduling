@@ -162,6 +162,47 @@ describe.runIf(databaseEnabled)(
       ).toBe(1);
     });
 
+    it("lets the worker read everything its jobs need within one organisation", async () => {
+      // Notification planning, delivery, integrations and sweeps read these
+      // under tenant context; a permission error here stops the worker.
+      for (const table of [
+        "directory.practices",
+        "directory.practice_locations",
+        "directory.patients",
+        "directory.patient_contacts",
+        "directory.patient_identifiers",
+        "scheduling.practitioners",
+        "scheduling.appointment_types",
+        "scheduling.appointments",
+        "scheduling.slot_holds",
+        "scheduling.waitlist_entries",
+        "scheduling.waitlist_offers",
+        "messaging.notification_preferences",
+        "messaging.notification_deliveries",
+        "messaging.channel_conversations",
+        "messaging.channel_messages",
+        "integration.connections",
+        "integration.events",
+        "platform.outbox_events",
+      ]) {
+        const n = await count(workerPool(), table, { tenantId: a.tenantId });
+        expect(n, `${table} unreadable by the worker`).toBeGreaterThanOrEqual(
+          0,
+        );
+      }
+      expect(
+        await count(workerPool(), "directory.practices", {
+          tenantId: a.tenantId,
+        }),
+      ).toBeGreaterThanOrEqual(1);
+      // ...and never the workforce directory.
+      expect(
+        await count(workerPool(), "directory.practice_memberships", {
+          tenantId: a.tenantId,
+        }),
+      ).toBe(-1);
+    });
+
     it("refuses writes into another practice or organisation", async () => {
       await expect(
         tenantTx(

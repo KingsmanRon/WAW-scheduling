@@ -211,9 +211,60 @@ describe("worker startup configuration", () => {
       "postgres://access_worker.projectref:secret@db.example.test:5432/postgres",
     DATABASE_SSL: "require",
     CONNECTOR_KIND: "none",
+    METRICS_TOKEN: "worker-metrics-token-at-least-32-characters",
   };
   it("client-pilot REAL uses no connector (manual destination) and validates", () =>
     expect(loadWorkerConfig(pilotWorker).connector.capabilities).toEqual([]));
+  it("scheduling platform settings: metrics, providers, allow-list and targets fail closed", () => {
+    const noToken: Record<string, string> = { ...pilotWorker };
+    delete noToken.METRICS_TOKEN;
+    expect(problems(() => loadWorkerConfig(noToken)).join()).toMatch(
+      /requires METRICS_TOKEN/,
+    );
+    const pilot = loadWorkerConfig(pilotWorker);
+    // Real data: no recipient restriction unless one is configured.
+    expect(pilot.notifications.allowList).toBeNull();
+    expect(pilot.smtp).toBeNull();
+    expect(pilot.whatsapp.graphBaseUrl).toBe("https://graph.facebook.com");
+    expect(pilot.port).toBe(8081);
+    // Synthetic data: only allow-listed test recipients are ever messaged.
+    const staging = loadWorkerConfig({
+      NODE_ENV: "production",
+      ACCESS_DEPLOYMENT_PROFILE: "synthetic-staging",
+      ACCESS_DATA_MODE: "SYNTHETIC",
+      WORKER_DATABASE_URL: "postgres://access_worker:secret@db.example.test/db",
+      NOTIFICATION_RECIPIENT_ALLOWLIST: "+27820000001, QA@Example.com",
+    });
+    expect([...staging.notifications.allowList!]).toEqual([
+      "+27820000001",
+      "qa@example.com",
+    ]);
+    expect(
+      loadWorkerConfig({
+        NODE_ENV: "test",
+        DATABASE_URL: "postgres://localhost/access",
+      }).notifications.allowList?.size,
+    ).toBe(0);
+    for (const [env, message] of [
+      [{ NOTIFICATION_RECIPIENT_ALLOWLIST: "0820000001" }, /E.164/],
+      [{ SMTP_URL: "smtps://u:p@smtp.example.test" }, /set together/],
+      [
+        {
+          SMTP_URL: "smtp://u:p@smtp.example.test",
+          SMTP_FROM: "a@example.test",
+          SMTP_REQUIRE_TLS: "false",
+        },
+        /only permitted in the local profile/,
+      ],
+      [{ INTEGRATION_ALLOW_PRIVATE_TARGETS: "true" }, /local profile/],
+      [{ WHATSAPP_GRAPH_BASE_URL: "http://graph.example.test" }, /https/],
+      [{ WHATSAPP_API_VERSION: "latest" }, /v23.0/],
+      [{ METRICS_TOKEN: "short" }, /at least 32/],
+    ] as const)
+      expect(
+        problems(() => loadWorkerConfig({ ...pilotWorker, ...env })).join(),
+      ).toMatch(message);
+  });
   it("refuses the mock connector with real data, unknown and unimplemented capabilities and fault injection", () => {
     expect(
       problems(() =>

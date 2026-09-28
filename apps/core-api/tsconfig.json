@@ -15,7 +15,16 @@
       "path": "../../packages/domain"
     },
     {
+      "path": "../../packages/integrations"
+    },
+    {
+      "path": "../../packages/notifications"
+    },
+    {
       "path": "../../packages/observability"
+    },
+    {
+      "path": "../../packages/patients"
     },
     {
       "path": "../../packages/policy"
@@ -25,9 +34,6 @@
     },
     {
       "path": "../../packages/scheduling"
-    },
-    {
-      "path": "../../packages/patients"
     }
   ],
   "compilerOptions": {

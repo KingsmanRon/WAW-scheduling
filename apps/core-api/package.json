@@ -12,6 +12,8 @@
     "@access/contracts": "*",
     "@access/db": "*",
     "@access/domain": "*",
+    "@access/integrations": "*",
+    "@access/notifications": "*",
     "@access/observability": "*",
     "@access/patients": "*",
     "@access/policy": "*",

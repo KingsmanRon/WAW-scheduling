@@ -29,6 +29,12 @@
       "path": "packages/patients"
     },
     {
+      "path": "packages/notifications"
+    },
+    {
+      "path": "packages/integrations"
+    },
+    {
       "path": "apps/core-api"
     },
     {

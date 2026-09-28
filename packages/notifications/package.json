@@ -1,23 +1,22 @@
 {
-  "name": "@access/worker",
+  "name": "@access/notifications",
   "version": "0.1.0",
   "type": "module",
+  "exports": "./dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
-    "build": "tsc -b",
-    "start": "node dist/main.js"
+    "build": "tsc -b"
   },
   "dependencies": {
-    "@access/config": "*",
     "@access/contracts": "*",
     "@access/db": "*",
-    "@access/domain": "*",
     "@access/integrations": "*",
-    "@access/notifications": "*",
     "@access/observability": "*",
-    "@access/policy": "*",
-    "@access/rules": "*",
     "@access/scheduling": "*",
+    "luxon": "^3.7.2",
     "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.7.1",
+    "@types/pg": "^8.15.5"
   }
 }

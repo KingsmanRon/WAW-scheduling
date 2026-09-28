@@ -608,9 +608,10 @@ describe.runIf(databaseEnabled)("ledger migrations and legacy backfill", () => {
         "INSERT INTO access_cases(id,tenant_id,case_type,source_channel,current_state,opened_at) VALUES($1,$2,'APPOINTMENT_REQUEST','API','RECEIVED',now())",
         [legacy, tenant],
       );
-      expect((await migrate(pool)).applied).toEqual([
-        "0011_retire_appointment_operations",
-      ]);
+      expect(
+        (await migrate(pool, { until: "0011_retire_appointment_operations" }))
+          .applied,
+      ).toEqual(["0011_retire_appointment_operations"]);
       const kept = await pool.query(
         "SELECT case_type,current_state FROM access_cases WHERE id=$1",
         [legacy],

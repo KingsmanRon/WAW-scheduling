@@ -188,6 +188,9 @@ export async function cancelAppointment(
     {
       ...f,
       reason_code: input.reasonCode,
+      // Where the cancellation was made (a WhatsApp conversation confirms
+      // it there; other channels get a notification).
+      channel: ctx.channel,
       // A future slot was freed: the waitlist may offer it.
       slot_freed: +a.startsAt > +now,
     },

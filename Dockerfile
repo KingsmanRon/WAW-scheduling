@@ -8,6 +8,8 @@ COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/domain/package.json packages/domain/package.json
+COPY packages/integrations/package.json packages/integrations/package.json
+COPY packages/notifications/package.json packages/notifications/package.json
 COPY packages/observability/package.json packages/observability/package.json
 COPY packages/patients/package.json packages/patients/package.json
 COPY packages/policy/package.json packages/policy/package.json

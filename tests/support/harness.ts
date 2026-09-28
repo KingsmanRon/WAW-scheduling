@@ -115,6 +115,8 @@ export async function testApi(
     scanner?: ArtifactScanner;
     extractor?: ExtractionPort;
     store?: ArtifactStore;
+    /** Local webhook receivers (http, loopback) as in the local profile. */
+    allowPrivateTargets?: boolean;
   } = {},
 ): Promise<TestApi> {
   const artifactRoot = await mkdtemp(join(tmpdir(), "access-artifacts-"));
@@ -148,6 +150,7 @@ export async function testApi(
     hasher: new IdentifierHasher(Buffer.alloc(32, 7), "test-key-1"),
     corsOrigins: ["http://localhost:3000"],
     info: { profile: "local", dataMode: "SYNTHETIC", buildId: "test" },
+    integrationPolicy: { allowInsecure: options.allowPrivateTargets ?? false },
   });
   return { app, service, artifactRoot, store, close: () => app.close() };
 }

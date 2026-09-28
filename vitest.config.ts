@@ -17,6 +17,8 @@ export default defineConfig({
       "@access/db": src("db"),
       "@access/scheduling": src("scheduling"),
       "@access/patients": src("patients"),
+      "@access/integrations": src("integrations"),
+      "@access/notifications": src("notifications"),
     },
   },
   test: {

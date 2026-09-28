@@ -87,6 +87,9 @@ const app = await buildApp({
     config.identifierHash.keyId,
   ),
   metricsToken: config.metricsToken,
+  integrationPolicy: {
+    allowInsecure: config.integrations.allowPrivateTargets,
+  },
   corsOrigins: config.corsOrigins,
   info: {
     profile: config.profile,

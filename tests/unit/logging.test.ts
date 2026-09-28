@@ -53,28 +53,41 @@ describe("privacy-safe logging", () => {
     expect(JSON.stringify(errorFields(e))).not.toContain("Jane");
   });
   it("every log call site uses only allow-listed field names", async () => {
-    const roots = ["apps/core-api/src", "apps/worker/src", "packages/db/src"];
-    const offenders: string[] = [];
-    for (const root of roots)
-      for (const file of await readdir(root)) {
-        if (!file.endsWith(".ts")) continue;
-        const source = await readFile(join(root, file), "utf8");
-        for (const call of source.matchAll(
-          /\blog\(\s*"(?:info|warn|error)",\s*"[a-z_]+",\s*\{([^}]*)\}/g,
-        )) {
-          const keys = [...call[1]!.matchAll(/(?:^|,)\s*([a-z_]+)\s*:/g)].map(
-            (m) => m[1]!,
-          );
-          for (const k of keys)
-            if (!LOG_FIELD_ALLOWLIST.has(k) || SENSITIVE_FIELDS.has(k))
-              offenders.push(`${root}/${file}: ${k}`);
-        }
-        // Raw error strings may carry row data or free text.
-        if (
-          /log\([^)]*error:\s*(String\(|e\.message|error\.message)/.test(source)
-        )
-          offenders.push(`${root}/${file}: raw error text`);
+    // Every server-side source file (apps and packages, all depths).
+    const files: string[] = [];
+    const walk = async (dir: string): Promise<void> => {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        if (["node_modules", "dist"].includes(entry.name)) continue;
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) await walk(path);
+        else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts"))
+          files.push(path);
       }
+    };
+    await walk("apps/core-api/src");
+    await walk("apps/worker/src");
+    for (const pkg of await readdir("packages"))
+      await walk(join("packages", pkg, "src"));
+    expect(files.length).toBeGreaterThan(60);
+    const offenders: string[] = [];
+    for (const file of files) {
+      const source = await readFile(file, "utf8");
+      for (const call of source.matchAll(
+        /\blog\(\s*"(?:info|warn|error)",\s*"[a-z_]+",\s*\{([^}]*)\}/g,
+      )) {
+        const keys = [...call[1]!.matchAll(/(?:^|,)\s*([a-z_]+)\s*:/g)].map(
+          (m) => m[1]!,
+        );
+        for (const k of keys)
+          if (!LOG_FIELD_ALLOWLIST.has(k) || SENSITIVE_FIELDS.has(k))
+            offenders.push(`${file}: ${k}`);
+      }
+      // Raw error strings may carry row data or free text.
+      if (
+        /log\([^)]*error:\s*(String\(|e\.message|error\.message)/.test(source)
+      )
+        offenders.push(`${file}: raw error text`);
+    }
     expect(offenders).toEqual([]);
   });
 });

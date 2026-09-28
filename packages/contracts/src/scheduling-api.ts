@@ -3,7 +3,12 @@ import {
   BLOCK_REASON_CODES,
   BOOKING_CHANNELS,
   CANCELLATION_REASON_CODES,
+  EMR_EVENT_TYPES,
   EXCEPTION_REASON_CODES,
+  INTEGRATION_EVENT_STATUSES,
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_STATUSES,
+  NOTIFICATION_TYPES,
   PRACTICE_ROLES,
   PROFESSIONS,
 } from "./scheduling.js";
@@ -370,3 +375,72 @@ export const auditQuerySchema = z.object({
   before_id: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
+
+// --- Notifications and integrations ---------------------------------------
+
+/**
+ * A patient's consent to business-initiated messages, as recorded by staff
+ * (the patient told them). Opting in stamps the consent source and time;
+ * every change is audited.
+ */
+export const notificationPreferencesSchema = z
+  .object({
+    whatsapp_opt_in: z.boolean(),
+    email_opt_in: z.boolean(),
+    reminders_enabled: z.boolean().default(true),
+    preferred_channel: z.enum(NOTIFICATION_CHANNELS).nullable().default(null),
+    /** Optimistic concurrency: the version last read (omit to create). */
+    expected_version: version.optional(),
+  })
+  .strict();
+export const deliveryListQuerySchema = z
+  .object({
+    status: z
+      .string()
+      .max(200)
+      .transform((v) => v.split(",").filter(Boolean))
+      .pipe(z.array(z.enum(NOTIFICATION_STATUSES)).max(8))
+      .optional(),
+    type: z.enum(NOTIFICATION_TYPES).optional(),
+    patient_id: id.optional(),
+    appointment_id: id.optional(),
+    /** Keyset: only rows created before this instant. */
+    before: instantSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+  })
+  .strict();
+const secretRef = z
+  .string()
+  .regex(
+    /^EMR_WEBHOOK_[A-Z0-9_]{1,88}$/,
+    "must name an EMR_WEBHOOK_* secret in the worker environment",
+  );
+const issuer = z.string().regex(/^[A-Za-z0-9_.:-]{1,80}$/);
+export const emrConnectionSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    url: z.string().min(8).max(500),
+    event_types: z.array(z.enum(EMR_EVENT_TYPES)).min(1).optional(),
+    patient_identifier_issuer: issuer.optional(),
+    secret_ref: secretRef,
+  })
+  .strict();
+export const emrConnectionPatchSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    url: z.string().min(8).max(500).optional(),
+    event_types: z.array(z.enum(EMR_EVENT_TYPES)).min(1).optional(),
+    patient_identifier_issuer: issuer.nullable().optional(),
+    secret_ref: secretRef.optional(),
+    status: z.enum(["ACTIVE", "DISABLED"]).optional(),
+    expected_version: version,
+  })
+  .strict();
+export const integrationEventListQuerySchema = z
+  .object({
+    status: z.enum(INTEGRATION_EVENT_STATUSES).optional(),
+    connection_id: id.optional(),
+    before: instantSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+  })
+  .strict();

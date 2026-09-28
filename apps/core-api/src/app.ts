@@ -29,6 +29,7 @@ import {
   verifyEvidenceChain,
 } from "@access/db";
 import { errorFields, log, Metrics } from "@access/observability";
+import type { TargetPolicy } from "@access/integrations";
 import type { IdentifierHasher } from "@access/patients";
 import { assertCaseTypeEnabled, authorize } from "@access/policy";
 import { RuleValidationError } from "@access/rules";
@@ -37,6 +38,7 @@ import {
   schedulingErrorFromDatabase,
 } from "@access/scheduling";
 import type { AuthContext, Authenticator } from "./auth.js";
+import { registerMessagingRoutes } from "./messaging-routes.js";
 import { registerPracticeRoutes } from "./practice-routes.js";
 import { caseDetail, queue } from "./queries.js";
 import { CaseService } from "./service.js";
@@ -51,6 +53,8 @@ export interface AppDeps {
   /** When set, GET /metrics requires `Authorization: Bearer <token>`. */
   metricsToken?: string | undefined;
   metrics?: Metrics;
+  /** Webhook targets: public HTTPS only unless the local profile allows. */
+  integrationPolicy?: TargetPolicy;
 }
 declare module "fastify" {
   interface FastifyRequest {
@@ -199,6 +203,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     authenticator: deps.authenticator,
     hasher: deps.hasher,
     metrics,
+  });
+  await registerMessagingRoutes(app, {
+    pool: deps.pool,
+    authenticator: deps.authenticator,
+    hasher: deps.hasher,
+    metrics,
+    integrationPolicy: deps.integrationPolicy ?? { allowInsecure: false },
   });
 
   // Referral intake (REFERRAL case type).

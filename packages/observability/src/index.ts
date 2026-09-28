@@ -63,6 +63,9 @@ export const LOG_FIELD_ALLOWLIST = new Set([
   "backoff_ms",
   "http_status",
   "limit",
+  "failure_kind",
+  "job",
+  "skip_reason",
 ]);
 /** Never logged, at any depth, even if someone adds them to the allowlist. */
 export const SENSITIVE_FIELDS = new Set([
