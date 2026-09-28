@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import pg from "pg";
+import { createPool } from "@access/db";
 import { provisionWhatsApp } from "@access/access";
 
 /**
@@ -46,7 +46,14 @@ for (const required of [
     process.stderr.write(`--${required} is required\n`);
     process.exit(64);
   }
-const pool = new pg.Pool({ connectionString: url, max: 1 });
+const pool = createPool({
+  connectionString: url,
+  ssl: process.env.DATABASE_SSL === "require" ? "require" : undefined,
+  caCertPath: process.env.DATABASE_CA_CERT_PATH,
+  caCert: process.env.DATABASE_CA_CERT,
+  max: 1,
+  applicationName: "access-operator",
+});
 try {
   const result = await provisionWhatsApp(pool, {
     tenantId: values.tenant!,

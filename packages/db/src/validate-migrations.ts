@@ -1,5 +1,5 @@
-import pg from "pg";
 import { migrate } from "./migrations.js";
+import { createPool } from "./runtime.js";
 import { verifySchemaSecurity } from "./schema-security.js";
 import { simulateSupabase } from "./supabase-simulation.js";
 
@@ -19,13 +19,15 @@ const adminUrl = process.env.VALIDATION_DATABASE_URL;
 if (!adminUrl) throw new Error("VALIDATION_DATABASE_URL required");
 const supabase = process.env.VALIDATION_SUPABASE_ROLES !== "false";
 const name = `access_validate_${Date.now()}_${process.pid}`;
-const admin = new pg.Pool({ connectionString: adminUrl, max: 1 });
+const admin = createPool({ connectionString: adminUrl, max: 1 });
 const target = new URL(adminUrl);
 target.pathname = `/${name}`;
 let failed = false;
 try {
   await admin.query(`CREATE DATABASE ${name}`);
-  const pool = new pg.Pool({ connectionString: target.toString(), max: 2 });
+  // pool.end() does not wait for connections to close; the forced drop
+  // below may end one first, which createPool's pools tolerate.
+  const pool = createPool({ connectionString: target.toString(), max: 2 });
   try {
     if (supabase) await simulateSupabase(pool);
     const first = await migrate(pool, { log: (m) => console.log(m) });

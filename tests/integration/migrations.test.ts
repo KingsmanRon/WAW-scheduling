@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   DEFAULT_MIGRATIONS_DIRECTORY,
   appendEvidence,
+  createPool,
   discoverMigrations,
   legacyEvidenceHash,
   migrate,
@@ -39,7 +40,8 @@ async function scratchDatabase(): Promise<pg.Pool> {
   created.push(name);
   const url = new URL(process.env.TEST_DATABASE_URL!);
   url.pathname = `/${name}`;
-  return new pg.Pool({ connectionString: url.toString(), max: 4 });
+  // Dropped WITH (FORCE) after the test: tolerate connections ended then.
+  return createPool({ connectionString: url.toString(), max: 4 });
 }
 async function migrationsCopy(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "access-migrations-"));
