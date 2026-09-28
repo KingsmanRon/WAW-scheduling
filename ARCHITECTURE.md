@@ -115,6 +115,81 @@ is refused (`422`). Keys expire and are purged by the worker.
 **Optimistic versions.** Changes that edit an existing record take
 `expected_version`; a stale version is `409 VERSION_CONFLICT`.
 
+### The booking transaction
+
+A direct booking (reception on the phone or at the desk,
+`POST /v1/practices/:practiceId/appointments`):
+
+1. Verify the JWT; resolve the caller's membership and role for the
+   practice in the URL; require `appointment.book`; validate the body
+   (strict schema; `source_channel` one of the seven channels).
+2. `BEGIN`; bind tenant, practice, user and role for RLS; claim the
+   `Idempotency-Key` (a retry replays the stored answer, the same key with
+   other content is refused).
+3. Lock the practitioner row. Concurrent commands for that practitioner,
+   from any channel or process, queue here.
+4. Re-read committed state under the lock: practice settings, the
+   appointment type (duration, buffers, notice, advance window, who may
+   book it, referral rules), the location, the patient, the referral
+   (locked: verified, valid, visits left, same patient and type) and the
+   waitlist entry when booking from the waitlist.
+5. Expire the practitioner's lapsed holds (a lapsed hold never blocks a
+   booking).
+6. Check the time against availability computed from rules, exceptions,
+   blocks, appointments and holds in the location's time zone
+   (`SLOT_UNAVAILABLE`, `OUTSIDE_AVAILABILITY`, `OUTSIDE_BOOKING_WINDOW`,
+   `NOT_ON_SLOT_GRID`, `PRACTITIONER_NOT_AT_LOCATION`) and the patient's own
+   appointments (`PATIENT_SCHEDULE_CONFLICT`). Staff allowed to override
+   availability may book outside it; the override is recorded and audited.
+7. Insert the appointment `CONFIRMED` with its `source_channel` and the
+   signed-in staff member as `booked_by`; the exclusion constraint checks
+   it against every occupying appointment of the practitioner.
+8. Append the `CONFIRMED` appointment event, the `APPOINTMENT_CONFIRMED`
+   outbox event and the `appointment.created` audit entry; a trigger bumps
+   the practice's `schedule_signals` counter.
+9. Store the answer under the idempotency key; `COMMIT`. Realtime tells the
+   consoles to refresh; the worker plans the confirmation from the outbox.
+
+A deadlock or serialization failure retries the whole transaction (up to
+three times). A domain refusal rolls the command back to a savepoint and
+stores the refusal under the key, so a retry gets the same answer instead
+of racing again.
+
+### The hold transaction
+
+Guided booking in the console, WhatsApp, reschedules and waitlist offers
+reserve a time first (`POST …/slot-holds`):
+
+1. Steps 1-6 above; a reschedule hold also requires the appointment to be
+   `CONFIRMED`, without another pending replacement, and (for patients)
+   outside the practice's change cut-off.
+2. Insert a `HELD` appointment and its `scheduling.slot_holds` row
+   (`ACTIVE`, purpose, owning channel, actor and conversation, expiry = the
+   database clock + the practice's hold time). From this commit the time is
+   taken for every channel: the exclusion constraint counts `HELD`.
+3. Append the `HELD` appointment event; `COMMIT`. The console shows the
+   countdown; WhatsApp asks the patient to confirm.
+
+Confirming (`POST …/slot-holds/:holdId/confirm`, or the patient's "Yes"):
+
+1. Lock in the fixed order: practitioner(s), referral, waitlist entry, the
+   hold, the appointment.
+2. Refuse `HOLD_EXPIRED` once the expiry has passed (checked by the Core and
+   by a trigger), `HOLD_NOT_ACTIVE` if it was released, `HOLD_NOT_OWNED` if
+   another conversation holds it (staff share staff holds).
+3. Re-evaluate the booking rules at commit time (the type or referral may
+   have changed while the time was held).
+4. Mark the hold `CONSUMED` and the appointment `CONFIRMED` together; a
+   reschedule also moves the original to `RESCHEDULED`, linked both ways; a
+   waitlist booking closes the entry and withdraws its other offers.
+5. Append events, the outbox event and the audit entry (recorded under the
+   channel that made the hold); `COMMIT`.
+
+Releasing a hold cancels its `HELD` appointment (`HOLD_RELEASED`); a lapsed
+hold becomes `EXPIRED` (the worker sweeps every 15 seconds, and the next
+booking for the practitioner expires it inline), emitting `HOLD_EXPIRED` so
+the conversation that held it can say so.
+
 ## Channels
 
 Every appointment records its `source_channel` (`PHONE`, `WALK_IN`,
@@ -205,12 +280,24 @@ configuration, permanent) up to a bound.
   a clinical record.
 
 Migrations (`supabase/migrations`, applied by a ledger runner in order,
-never edited once applied): `0001`-`0005` the organisation referral
-pipeline; `0006` appointment operations v1 (retired); `0007` platform
-foundations (audit, outbox, idempotency); `0008` practice directory; `0009`
-Scheduling Core; `0010` messaging and integrations; `0011` retirement of
-appointment operations v1; `0012` notification worker; `0013` channel
-access layer.
+each in one transaction with its ledger row, never edited once applied):
+`0001`-`0005` the organisation referral pipeline; `0006` appointment
+operations v1 (retired); `0007` platform foundations (audit, outbox,
+idempotency); `0008` practice directory; `0009` Scheduling Core; `0010`
+messaging and integrations; `0011` retirement of appointment operations
+v1; `0012` notification worker; `0013` channel access layer; `0014`
+Supabase's browser and service roles lose their default grants in
+`public`; `0015` configuration rows (hours, leave, blocks) can be removed;
+`0016` the runtime logins read the migration ledger.
+
+**Releases follow the schema.** Each build ships its migrations and knows
+the newest one. The API's and the worker's `/ready` answer 503
+(`schema_behind`) until the database has applied it, and the worker does
+no work until then, so a release deployed before its migration job (or
+after a failed one) never takes traffic or processes events on an older
+schema. Migrations are additive (expand, migrate, contract), so the
+previous release keeps working on the newer schema and can be rolled back
+to.
 
 ## The organisation referral workspace
 

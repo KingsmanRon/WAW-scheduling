@@ -90,11 +90,17 @@ rotate them only with a re-encryption / re-hashing plan (RUNBOOK.md).
    user (`access_request.<project-ref>`). Runtime logins work in session or
    transaction mode (all context is transaction-scoped); the migration job
    needs **session** mode (it holds a session advisory lock).
+7. **Data API**: ACCESS does not use Supabase's Data API (PostgREST). `0014`
+   removes every grant Supabase gives `anon`, `authenticated` and
+   `service_role` in `public`; as defence in depth, also turn the Data API
+   off (Project Settings → Data API) or remove `public` from its exposed
+   schemas. Realtime, Auth and Storage do not depend on it.
 
 ## 2. Railway
 
-Create one Railway project per environment (staging, production) and four
-services from this repository:
+Create one Railway project (`access`) with two environments, `staging` and
+`production` (each has its own variables, deployments and private
+network), and four services from this repository:
 
 | Service   | Config file (Settings → Config-as-code) | Public domain       |
 | --------- | --------------------------------------- | ------------------- |
@@ -104,23 +110,25 @@ services from this repository:
 | `clamav`  | Docker image `clamav/clamav:stable`     | no (private, 3310)  |
 
 Each file lists its variables. Common to all: `ACCESS_DEPLOYMENT_PROFILE`,
-`ACCESS_DATA_MODE`, `NODE_ENV=production`, `BUILD_ID=${{RAILWAY_GIT_COMMIT_SHA}}`,
-`DATABASE_SSL=require`, `DATABASE_CA_CERT`. Use shared variables for values
+`ACCESS_DATA_MODE`, `NODE_ENV=production`, `DATABASE_SSL=require`,
+`DATABASE_CA_CERT` (`BUILD_ID` is optional: `/health` otherwise reports
+Railway's commit or deployment id). Use shared variables for values
 two services need (`IDENTIFIER_HASH_KEY`, `METRICS_TOKEN`), and set the API's
 `CLAMAV_HOST=clamav.railway.internal`.
 
-**Release order** for a change with a migration:
-
-1. Deploy `migrate` (it runs, prints what it applied, and stops).
-2. Deploy `api` (readiness check `/ready`; old replicas drain for 25 s).
-3. Deploy `worker` (readiness `/ready` on its `PORT`; in-flight leases expire harmlessly).
-
+**Release order**: `migrate`, then `api`, then `worker` (commands below).
+The order is also enforced: a build's `/ready` answers 503
+(`schema_behind`) and its worker does no work until the database has the
+newest migration the build ships with, so an `api` or `worker` deployed
+first simply waits (Railway keeps the previous deployment serving until the
+new one is ready, or fails the deploy after the health-check timeout).
 Migrations are additive and backward compatible with the running release
-(below), so step 1 never breaks the release still serving.
+(below), so applying them never breaks the release still serving; old API
+replicas drain for 25 s.
 
 **Rollback**: redeploy the previous successful deployment of `api` and
-`worker` in Railway. Migrations are not rolled back; because they are
-additive, the previous release runs against the newer schema.
+`worker` (RUNBOOK.md, "Rollback"). Migrations are not rolled back; because
+they are additive, the previous release runs against the newer schema.
 
 ## 3. Vercel (console)
 
@@ -196,6 +204,119 @@ setup**. Further staff are granted practice roles through
 For staging or a demonstration, `npm run practice:demo -- --tenant … --practice …`
 adds synthetic locations, practitioners, types, hours and patients (refused
 with REAL data).
+
+## 6. Deploying to staging
+
+Once per machine: `npm i -g @railway/cli vercel`, `railway login`,
+`vercel login`; in a checkout: `railway link` (the `access` project) and
+`vercel link` (the **staging** console project), both from the repository
+root. Then, for a release candidate whose CI run is green:
+
+```bash
+git fetch origin && git checkout <commit>
+
+# 1. Migrations: the job applies what is new, prints it and stops.
+railway up -s migrate -e staging --ci
+railway logs -s migrate -e staging -n 20
+#    last line: {"applied":[…],"baselined":[],"already_applied":N}
+
+# 2. API: goes live once /ready passes (after the migration).
+railway up -s api -e staging --ci
+railway deployment list -s api -e staging --limit 2
+curl -fsS https://<staging-api-domain>/health    # "build": this deployment
+curl -fsS https://<staging-api-domain>/ready
+
+# 3. Worker.
+railway up -s worker -e staging --ci
+railway ssh -s worker -e staging -- node -e "fetch('http://localhost:'+process.env.PORT+'/ready').then(async r=>console.log(r.status,await r.text()))"
+
+# 4. Console (the staging Vercel project's production deployment).
+vercel deploy --prod
+```
+
+With GitHub auto-deploys on the staging environment instead (services
+connected to the repository, "Wait for CI" on), the same order holds: the
+API and worker of a new commit stay not-ready until `migrate` has applied
+its migrations.
+
+Staging data is synthetic only: `npm run practice:bootstrap` and
+`npm run practice:demo` (section 5) with the staging owner URL
+(`railway run -s migrate -e staging -- npm run practice:demo -- …`), a
+WhatsApp test number connected with `channel:whatsapp:connect`, and the
+testers' phones in `NOTIFICATION_RECIPIENT_ALLOWLIST` on the worker.
+
+## 7. Staging acceptance
+
+Run on the exact commit to be released, after section 6. The automated
+suites have already passed in CI (unit, integration, concurrency, security,
+migrations from a clean database, browser end to end).
+
+1. **Health**: `/health` (its `build` is the commit for GitHub deploys,
+   the Railway deployment id for CLI deploys) and `/ready` on the API and
+   the worker; `/metrics` answers only with `METRICS_TOKEN`; Prometheus
+   shows both targets up.
+2. **Sign-in and roles**: sign in as a practice administrator,
+   receptionist, doctor, clinical staff member and read-only user; each
+   sees only their menus; read-only cannot book (the API answers 403).
+3. **Phone booking**: as reception, find a patient, choose type,
+   practitioner and time, confirm within the hold time; the appointment
+   appears in Today, Day, Week, practitioner and location views; its
+   **History** and **Audit** show the receptionist and channel PHONE.
+4. **Concurrent desks**: two browsers pick the same time; one books, the
+   other sees "The requested time is no longer available." with refreshed
+   alternatives.
+5. **Changes**: reschedule and cancel (with reason); the allow-listed
+   phone receives the WhatsApp templates; **Notifications** shows each
+   delivery and its status.
+6. **WhatsApp**: from an allow-listed phone, "Hi" → Book → a time → Yes;
+   the console shows the booking within seconds; then "cancel" → Yes; the
+   console shows it cancelled. "Talk to reception" appears under
+   **Conversations → Needs reception**.
+7. **Waitlist**: put a patient on the waitlist, cancel a matching
+   appointment; the offer arrives; "Book it" books it and closes the entry.
+8. **Schedule setup**: add and remove working hours, leave and a block (each
+   removal asks first); the times disappear from and return to both the
+   console and the WhatsApp list.
+9. **Visit**: check in, start, complete; mark another appointment as a
+   no-show after its start (asks first).
+10. **Referrals**: register a referral with a PDF; a doctor opens it through
+    the one-minute link; reception cannot open documents.
+11. **Worker outage**: remove the worker's deployment, book an appointment,
+    redeploy the worker: the confirmation is sent once, late.
+12. **Isolation**: the API without a token answers 401; a second practice's
+    ids answer 404.
+13. **Rollback drill**: roll `api` back to the previous deployment (RUNBOOK.md),
+    check `/ready`, roll forward again.
+
+Record the commit, the date and the result of each step.
+
+## 8. Production release
+
+1. Staging accepted on the same commit (section 7). No open incident; the
+   outbox is not backed up (RUNBOOK.md, diagnostic queries).
+2. Supabase (production): point-in-time recovery is on; note the current
+   time as the restore point.
+3. Release:
+
+   ```bash
+   git checkout <accepted commit>
+   railway up -s migrate -e production --ci
+   railway logs -s migrate -e production -n 20      # applied migrations, or stop:
+                                                    # RUNBOOK.md, "Migration failure"
+   railway up -s api -e production --ci
+   railway deployment list -s api -e production --limit 2
+   curl -fsS https://<api-domain>/ready
+   railway up -s worker -e production --ci
+   railway ssh -s worker -e production -- node -e "fetch('http://localhost:'+process.env.PORT+'/ready').then(async r=>console.log(r.status,await r.text()))"
+   vercel deploy --prod                               # production console project, if it changed
+   ```
+
+4. Smoke test without patient-facing actions: sign in, open Today and a
+   practitioner's week, list availability; `curl -sI` the console shows its
+   security headers.
+5. Watch for 30 minutes: 5xx rate, `slot_conflicts_total`,
+   `outbox_oldest_pending_seconds`, notification failures, alerts.
+6. Anything wrong: RUNBOOK.md, "Rollback".
 
 ## Schema changes
 

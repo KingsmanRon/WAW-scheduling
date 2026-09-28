@@ -77,6 +77,14 @@ practice's administrator), requiring the policy's answer each time.
   privileges they use; the browser roles (`anon`, `authenticated`) can read
   nothing but their own practices' change signals (tested in
   `tests/integration/scheduling-rls.test.ts`).
+- Supabase grants `anon`, `authenticated` and `service_role` everything the
+  owner creates in `public` and serves `public` through its Data API to
+  anyone holding the (public) anon key. `0014` withdraws all of it,
+  including from the tenant catalogue and the migration ledger, which carry
+  no row-level security, and stops new tables inheriting it. The test and
+  validation databases reproduce Supabase's default grants, and the schema
+  check (CI, on every migration) fails on any grant to those roles outside
+  the Realtime signal.
 
 ## Integrity
 
@@ -84,6 +92,8 @@ practice's administrator), requiring the policy's answer each time.
   checks; appointment and referral transitions by triggers as well as by
   the Core. Holds, idempotency keys and optimistic versions make retries
   and concurrent edits safe.
+- A release never runs on an older schema: `/ready` and the worker wait
+  until the database has the build's newest migration.
 - The audit trail (`platform.audit_events`) is append-only (triggers refuse
   update, delete and truncate) and records actor, role, channel, the record
   and the administrative before/after of every change, document link

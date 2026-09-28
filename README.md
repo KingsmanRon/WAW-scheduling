@@ -78,6 +78,7 @@ npm run format && npm run lint && npm run typecheck
 npm run test:unit
 TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/access_test npm run test:integration
 npm run build && npm run test:e2e      # needs PostgreSQL; resets the access_e2e database
+VALIDATION_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm run db:validate
 npm run validate:infra && npm run check:secrets
 ```
 
@@ -96,6 +97,9 @@ npm run validate:infra && npm run check:secrets
   console bundle holds no server secret.
 - **Browser** (Playwright, desktop and phone): the console, API and worker
   as deployed, including WhatsApp ↔ console flows and the waitlist.
+- **Migrations**: every migration applied to a clean database standing in
+  for Supabase (and to plain PostgreSQL), twice, then the schema's security
+  invariants checked.
 
 CI (`.github/workflows/ci.yml`) runs all of them; skipped tests fail the
 build.

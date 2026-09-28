@@ -32,16 +32,22 @@ jobs:
         run: npm run lint
       - name: Typecheck (runtime and tests)
         run: npm run typecheck
+      - name: Migrations from a clean database (standing in for Supabase, then plain PostgreSQL), applied twice, schema security verified
+        env:
+          VALIDATION_DATABASE_URL: "postgres://postgres:postgres@localhost:5432/postgres"
+        run: |
+          npm run db:validate
+          VALIDATION_SUPABASE_ROLES=false npm run db:validate
       - name: Unit tests (availability engine, scheduling rules, patients, integrations, notification selection, WhatsApp interpreter and intent classifier, referral document links, lifecycle, rules, policy, config, storage, scanner, logging, migrations, connector faults)
         run: npx vitest run --project unit --reporter=verbose --reporter=json --outputFile.json=unit-report.json
       - name: Assert unit suite ran without skips
-        run: node scripts/assert-test-report.mjs unit-report.json 145
+        run: node scripts/assert-test-report.mjs unit-report.json 146
       - name: PostgreSQL integration (migrations, RLS, scheduling core, concurrency, practice API, security (authorisation matrix, API surface, console secrets), patients, worker outbox/notifications/EMR webhooks, WhatsApp channel and access layer, referral register and documents, waitlist offers and their concurrency, dispatcher, ambiguity, poison, idempotency, outcomes, metrics, rules, artifacts, auth/tenancy, acceptance 1-29, E2E flows A-I)
         env:
           QUALIFICATION_REPORT: qualification-report.json
         run: npx vitest run --project integration --reporter=verbose --reporter=json --outputFile.json=integration-report.json
       - name: Assert integration suites ran without skips
-        run: node scripts/assert-test-report.mjs integration-report.json 185
+        run: node scripts/assert-test-report.mjs integration-report.json 189
       - name: Build
         run: npm run build
       - name: Deployment asset validation (Railway, Vercel, Compose)
