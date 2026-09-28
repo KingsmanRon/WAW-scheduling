@@ -19,6 +19,7 @@ export default defineConfig({
       "@access/patients": src("patients"),
       "@access/integrations": src("integrations"),
       "@access/notifications": src("notifications"),
+      "@access/access": src("access"),
     },
   },
   test: {

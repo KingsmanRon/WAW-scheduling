@@ -10,6 +10,7 @@ import {
 import type { NotificationTransports } from "../../packages/notifications/src/index.js";
 import type { OutboxRoutes } from "../../apps/worker/src/platform/outbox.js";
 import type { PlanEnvironment } from "../../packages/notifications/src/index.js";
+import type { IntentClassifier } from "@access/access";
 import { ownerPool, workerPool } from "./harness.js";
 import { run, staffCtx, type TestPractice } from "./scheduling.js";
 
@@ -33,12 +34,15 @@ export function testPlatform(
     outboxMaxAttempts?: number;
     transports?: NotificationTransports;
     routes?: (plan: PlanEnvironment) => OutboxRoutes;
+    classifier?: IntentClassifier;
   } = {},
 ): TestPlatform {
   const config = loadWorkerConfig({
     NODE_ENV: "test",
     DATABASE_URL: "postgres://unused.invalid/unused",
     WORKER_TENANT_IDS: tenantId,
+    // Same key as the API harness, so identifier digests agree.
+    IDENTIFIER_HASH_KEY: "07".repeat(32),
     WHATSAPP_GRAPH_BASE_URL: options.graphUrl ?? "http://127.0.0.1:9",
     WHATSAPP_TIMEOUT_MS: "1500",
     INTEGRATION_ALLOW_PRIVATE_TARGETS: "true",
@@ -61,6 +65,7 @@ export function testPlatform(
     transports: options.transports ?? createTransports(config, env),
     env,
     ...(options.routes ? { routes: options.routes } : {}),
+    ...(options.classifier ? { classifier: options.classifier } : {}),
   });
   return {
     ...platform,
@@ -70,6 +75,7 @@ export function testPlatform(
       for (let i = 0; i < 20; i++) {
         const n =
           (await platform.outbox.run(tenantId)) +
+          (await platform.outbound.run(tenantId)) +
           (await platform.notifications.run(tenantId)) +
           (await platform.integrations.run(tenantId));
         total += n;

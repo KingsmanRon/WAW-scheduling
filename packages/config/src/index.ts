@@ -247,6 +247,11 @@ export interface ApiConfig extends Common {
   metricsToken: string | undefined;
   /** Local profile only: EMR webhooks to http:// or private addresses. */
   integrations: { allowPrivateTargets: boolean };
+  /**
+   * WhatsApp webhook credentials (the platform's Meta app). Both unset: the
+   * WhatsApp channel is off and its webhook answers 404.
+   */
+  whatsapp: { appSecret: string; verifyToken: string } | null;
 }
 
 function positiveInt(
@@ -368,6 +373,7 @@ export function loadApiConfig(env: Env = process.env): ApiConfig {
     integrations: {
       allowPrivateTargets: env.INTEGRATION_ALLOW_PRIVATE_TARGETS === "true",
     },
+    whatsapp: whatsappWebhook(env, problems),
   };
   if (config.metricsToken !== undefined && config.metricsToken.length < 32)
     problems.push("METRICS_TOKEN must be at least 32 characters");
@@ -379,6 +385,27 @@ export function loadApiConfig(env: Env = process.env): ApiConfig {
     );
   if (problems.length) throw new ConfigError(problems);
   return config;
+}
+
+function whatsappWebhook(env: Env, problems: string[]): ApiConfig["whatsapp"] {
+  const appSecret = env.WHATSAPP_APP_SECRET;
+  const verifyToken = env.WHATSAPP_VERIFY_TOKEN;
+  if (!appSecret && !verifyToken) return null;
+  if (!appSecret || !verifyToken) {
+    problems.push(
+      "WHATSAPP_APP_SECRET and WHATSAPP_VERIFY_TOKEN must be set together",
+    );
+    return null;
+  }
+  if (appSecret.length < 16)
+    problems.push(
+      "WHATSAPP_APP_SECRET looks too short to be a Meta app secret",
+    );
+  if (!/^[\w-]{16,200}$/.test(verifyToken))
+    problems.push(
+      "WHATSAPP_VERIFY_TOKEN must be 16-200 letters, digits, _ or -",
+    );
+  return { appSecret, verifyToken };
 }
 
 export interface WorkerConfig extends Common {
@@ -416,6 +443,17 @@ export interface WorkerConfig extends Common {
     batchSize: number;
   };
   integrations: { allowPrivateTargets: boolean; timeoutMs: number };
+  /** Patient self-registration from channels hashes identifiers too. */
+  identifierHash: { key: Buffer; keyId: string };
+  accessLayer: { searchDays: number; maxSearchPages: number };
+  /** Optional LLM understanding of free text; null: deterministic only. */
+  intentClassifier: {
+    provider: "anthropic";
+    apiKey: string;
+    model: string;
+    timeoutMs: number;
+    maxPerMinute: number;
+  } | null;
   outboxMaxAttempts: number;
   retention: {
     deliveryContentDays: number;
@@ -472,6 +510,52 @@ function smtpConfig(
     from: from.trim(),
     requireTls,
     timeoutMs: positiveInt(env, "SMTP_TIMEOUT_MS", 15_000, 120_000, problems),
+  };
+}
+function intentClassifierConfig(
+  env: Env,
+  c: Common,
+  problems: string[],
+): WorkerConfig["intentClassifier"] {
+  const provider = env.INTENT_CLASSIFIER || "off";
+  if (provider === "off") return null;
+  if (provider !== "anthropic") {
+    problems.push("INTENT_CLASSIFIER must be off or anthropic");
+    return null;
+  }
+  const apiKey = env.ANTHROPIC_API_KEY ?? "";
+  if (apiKey.length < 20)
+    problems.push("INTENT_CLASSIFIER=anthropic requires ANTHROPIC_API_KEY");
+  const model = env.INTENT_CLASSIFIER_MODEL || "claude-opus-5";
+  if (!/^claude-[a-z0-9.-]{1,64}$/.test(model))
+    problems.push("INTENT_CLASSIFIER_MODEL must be a Claude model id");
+  // Patient messages would leave the platform for a processor abroad
+  // (POPIA section 72): real data needs the operator's explicit approval.
+  if (
+    c.dataMode === "REAL" &&
+    env.INTENT_CLASSIFIER_PROCESSOR_APPROVED !== "true"
+  )
+    problems.push(
+      "INTENT_CLASSIFIER with REAL data requires INTENT_CLASSIFIER_PROCESSOR_APPROVED=true (see SECURITY.md)",
+    );
+  return {
+    provider: "anthropic",
+    apiKey,
+    model,
+    timeoutMs: Math.max(
+      500,
+      positiveInt(env, "INTENT_CLASSIFIER_TIMEOUT_MS", 4000, 15_000, problems),
+    ),
+    maxPerMinute: Math.max(
+      1,
+      positiveInt(
+        env,
+        "INTENT_CLASSIFIER_MAX_PER_MINUTE",
+        120,
+        10_000,
+        problems,
+      ),
+    ),
   };
 }
 /** Capabilities each connector implementation has actually qualified. */
@@ -600,6 +684,18 @@ export function loadWorkerConfig(env: Env = process.env): WorkerConfig {
         problems,
       ),
     },
+    identifierHash: identifierHashKey(env, c, problems),
+    accessLayer: {
+      searchDays: Math.max(
+        1,
+        positiveInt(env, "CHANNEL_SEARCH_DAYS", 7, 31, problems),
+      ),
+      maxSearchPages: Math.max(
+        1,
+        positiveInt(env, "CHANNEL_SEARCH_PAGES", 4, 12, problems),
+      ),
+    },
+    intentClassifier: intentClassifierConfig(env, c, problems),
     outboxMaxAttempts: Math.max(
       1,
       positiveInt(env, "OUTBOX_MAX_ATTEMPTS", 10, 50, problems),

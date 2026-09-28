@@ -90,6 +90,7 @@ const app = await buildApp({
   integrationPolicy: {
     allowInsecure: config.integrations.allowPrivateTargets,
   },
+  whatsapp: config.whatsapp,
   corsOrigins: config.corsOrigins,
   info: {
     profile: config.profile,

@@ -3,6 +3,9 @@
   "include": ["src"],
   "references": [
     {
+      "path": "../../packages/access"
+    },
+    {
       "path": "../../packages/config"
     },
     {

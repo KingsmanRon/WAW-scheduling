@@ -62,6 +62,7 @@ services:
     environment:
       <<: *local
       WORKER_DATABASE_URL: "postgres://access_worker:local-worker@postgres:5432/access"
+      IDENTIFIER_HASH_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
       CONNECTOR_KIND: mock
       MOCK_APPOINTMENT_OUTCOME: NONE
     depends_on: { provision: { condition: service_completed_successfully } }

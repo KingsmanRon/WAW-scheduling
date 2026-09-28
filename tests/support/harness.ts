@@ -117,6 +117,8 @@ export async function testApi(
     store?: ArtifactStore;
     /** Local webhook receivers (http, loopback) as in the local profile. */
     allowPrivateTargets?: boolean;
+    /** Enable the WhatsApp webhook with these Meta app credentials. */
+    whatsapp?: { appSecret: string; verifyToken: string };
   } = {},
 ): Promise<TestApi> {
   const artifactRoot = await mkdtemp(join(tmpdir(), "access-artifacts-"));
@@ -151,6 +153,7 @@ export async function testApi(
     corsOrigins: ["http://localhost:3000"],
     info: { profile: "local", dataMode: "SYNTHETIC", buildId: "test" },
     integrationPolicy: { allowInsecure: options.allowPrivateTargets ?? false },
+    whatsapp: options.whatsapp ?? null,
   });
   return { app, service, artifactRoot, store, close: () => app.close() };
 }

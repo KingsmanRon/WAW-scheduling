@@ -38,6 +38,7 @@ import {
   schedulingErrorFromDatabase,
 } from "@access/scheduling";
 import type { AuthContext, Authenticator } from "./auth.js";
+import { registerChannelRoutes } from "./channel-routes.js";
 import { registerMessagingRoutes } from "./messaging-routes.js";
 import { registerPracticeRoutes } from "./practice-routes.js";
 import { caseDetail, queue } from "./queries.js";
@@ -55,6 +56,8 @@ export interface AppDeps {
   metrics?: Metrics;
   /** Webhook targets: public HTTPS only unless the local profile allows. */
   integrationPolicy?: TargetPolicy;
+  /** WhatsApp webhook credentials; absent: the channel is off. */
+  whatsapp?: { appSecret: string; verifyToken: string } | null;
 }
 declare module "fastify" {
   interface FastifyRequest {
@@ -76,7 +79,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     )
     .describe("scheduling_command_seconds", "Scheduling mutation latency")
     .describe("slot_conflicts_total", "SLOT_UNAVAILABLE refusals")
-    .describe("database_errors_total", "Unexpected database errors");
+    .describe("database_errors_total", "Unexpected database errors")
+    .describe(
+      "whatsapp_webhook_messages_total",
+      "WhatsApp messages received, by outcome",
+    )
+    .describe(
+      "whatsapp_webhook_statuses_total",
+      "WhatsApp delivery statuses applied",
+    )
+    .describe(
+      "whatsapp_webhook_rejected_total",
+      "WhatsApp webhook calls rejected, by reason",
+    );
   const app = Fastify({
     logger: false,
     bodyLimit: 14_000_000,
@@ -86,6 +101,70 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const value = Array.isArray(given) ? given[0] : given;
       return value && REQUEST_ID.test(value) ? value : randomUUID();
     },
+  });
+  // Set before any route: Fastify binds a route to the error handler in
+  // effect when the route is registered.
+  app.setErrorHandler((e, req, r) => {
+    // Domain refusals carry stable codes and safe, structured details.
+    const domain =
+      e instanceof SchedulingError ? e : schedulingErrorFromDatabase(e);
+    if (domain) {
+      log("warn", "request_rejected", {
+        route: req.routeOptions.url,
+        code: domain.code,
+        status_code: domain.statusCode,
+      });
+      if (domain.code === "SLOT_UNAVAILABLE")
+        metrics.inc("slot_conflicts_total", { operation: "read" });
+      return r.code(domain.statusCode).send({
+        error: domain.code,
+        message: domain.message,
+        ...(domain.details ? { details: domain.details } : {}),
+      });
+    }
+    if (e instanceof ZodError) {
+      log("warn", "request_rejected", {
+        route: req.routeOptions.url,
+        code: "VALIDATION_FAILED",
+      });
+      return r.code(400).send({
+        error: "VALIDATION_FAILED",
+        issues: e.issues.map((i) => ({ path: i.path.join("."), code: i.code })),
+      });
+    }
+    if (e instanceof RuleValidationError)
+      return r
+        .code(422)
+        .send({ error: e.code, message: e.message, issues: e.issues });
+    const status = (e as { statusCode?: number }).statusCode;
+    const code = (e as { code?: string }).code;
+    // Fastify's own client errors (e.g. body too large) carry a statusCode.
+    if (status && status >= 400 && status < 500) {
+      log("warn", "request_rejected", {
+        route: req.routeOptions.url,
+        ...errorFields(e),
+      });
+      return r
+        .code(status)
+        .send({ error: code ?? "BAD_REQUEST", message: (e as Error).message });
+    }
+    // PostgreSQL integrity violations are conflicts, reported without detail.
+    if (code === "23505" || code === "23514" || code === "23P01")
+      return r.code(409).send({
+        error: "CONFLICT",
+        message: "request conflicts with current state",
+      });
+    log("error", "request_failed", {
+      route: req.routeOptions.url,
+      request_id: String(req.id),
+      ...errorFields(e),
+    });
+    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code))
+      metrics.inc("database_errors_total", { code });
+    return r.code(status && status >= 500 ? status : 500).send({
+      error: status === 503 ? (code ?? "UNAVAILABLE") : "INTERNAL",
+      message: status === 503 ? (e as Error).message : "internal error",
+    });
   });
   await app.register(cors, {
     origin: deps.corsOrigins,
@@ -210,6 +289,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     hasher: deps.hasher,
     metrics,
     integrationPolicy: deps.integrationPolicy ?? { allowInsecure: false },
+  });
+  await registerChannelRoutes(app, {
+    pool: deps.pool,
+    authenticator: deps.authenticator,
+    hasher: deps.hasher,
+    metrics,
+    whatsapp: deps.whatsapp ?? null,
   });
 
   // Referral intake (REFERRAL case type).
@@ -546,67 +632,5 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     );
   });
 
-  app.setErrorHandler((e, req, r) => {
-    // Domain refusals carry stable codes and safe, structured details.
-    const domain =
-      e instanceof SchedulingError ? e : schedulingErrorFromDatabase(e);
-    if (domain) {
-      log("warn", "request_rejected", {
-        route: req.routeOptions.url,
-        code: domain.code,
-        status_code: domain.statusCode,
-      });
-      if (domain.code === "SLOT_UNAVAILABLE")
-        metrics.inc("slot_conflicts_total", { operation: "read" });
-      return r.code(domain.statusCode).send({
-        error: domain.code,
-        message: domain.message,
-        ...(domain.details ? { details: domain.details } : {}),
-      });
-    }
-    if (e instanceof ZodError) {
-      log("warn", "request_rejected", {
-        route: req.routeOptions.url,
-        code: "VALIDATION_FAILED",
-      });
-      return r.code(400).send({
-        error: "VALIDATION_FAILED",
-        issues: e.issues.map((i) => ({ path: i.path.join("."), code: i.code })),
-      });
-    }
-    if (e instanceof RuleValidationError)
-      return r
-        .code(422)
-        .send({ error: e.code, message: e.message, issues: e.issues });
-    const status = (e as { statusCode?: number }).statusCode;
-    const code = (e as { code?: string }).code;
-    // Fastify's own client errors (e.g. body too large) carry a statusCode.
-    if (status && status >= 400 && status < 500) {
-      log("warn", "request_rejected", {
-        route: req.routeOptions.url,
-        ...errorFields(e),
-      });
-      return r
-        .code(status)
-        .send({ error: code ?? "BAD_REQUEST", message: (e as Error).message });
-    }
-    // PostgreSQL integrity violations are conflicts, reported without detail.
-    if (code === "23505" || code === "23514" || code === "23P01")
-      return r.code(409).send({
-        error: "CONFLICT",
-        message: "request conflicts with current state",
-      });
-    log("error", "request_failed", {
-      route: req.routeOptions.url,
-      request_id: String(req.id),
-      ...errorFields(e),
-    });
-    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code))
-      metrics.inc("database_errors_total", { code });
-    return r.code(status && status >= 500 ? status : 500).send({
-      error: status === 503 ? (code ?? "UNAVAILABLE") : "INTERNAL",
-      message: status === 503 ? (e as Error).message : "internal error",
-    });
-  });
   return app;
 }

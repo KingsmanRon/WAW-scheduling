@@ -265,3 +265,62 @@ export async function listDeliveries(
     recipient: maskAddress(recipient_address),
   }));
 }
+
+/**
+ * Consent given or withdrawn by the patient in their own WhatsApp
+ * conversation (e.g. "yes please" to reminders, or STOP). Opting out also
+ * drops WhatsApp as the preferred channel. Audited like staff changes.
+ */
+export async function recordWhatsAppConsent(
+  c: DbClient,
+  ctx: NotificationAdminContext,
+  patientId: string,
+  optIn: boolean,
+): Promise<boolean> {
+  const existing = await c.query<PreferencesView>(
+    `SELECT ${PREF_COLUMNS} FROM messaging.notification_preferences
+      WHERE tenant_id=$1 AND practice_id=$2 AND patient_id=$3 FOR UPDATE`,
+    [ctx.tenantId, ctx.practiceId, patientId],
+  );
+  const before = existing.rows[0];
+  if (before && before.whatsapp_opt_in === optIn) return false;
+  if (!before && !optIn) return false;
+  if (before)
+    await c.query(
+      `UPDATE messaging.notification_preferences
+          SET whatsapp_opt_in=$4, whatsapp_consent_source=$5, whatsapp_consent_at=$6,
+              preferred_channel=CASE WHEN NOT $4 AND preferred_channel='WHATSAPP' THEN NULL ELSE preferred_channel END,
+              updated_by=$7, version=version+1
+        WHERE tenant_id=$1 AND practice_id=$2 AND patient_id=$3`,
+      [
+        ctx.tenantId,
+        ctx.practiceId,
+        patientId,
+        optIn,
+        optIn ? "PATIENT_WHATSAPP" : null,
+        optIn ? new Date() : null,
+        ctx.actor.id,
+      ],
+    );
+  else
+    await c.query(
+      `INSERT INTO messaging.notification_preferences(tenant_id, practice_id, patient_id, whatsapp_opt_in,
+          whatsapp_consent_source, whatsapp_consent_at, updated_by)
+       VALUES($1,$2,$3,true,'PATIENT_WHATSAPP',now(),$4)`,
+      [ctx.tenantId, ctx.practiceId, patientId, ctx.actor.id],
+    );
+  await recordAuditEvent(c, {
+    tenantId: ctx.tenantId,
+    practiceId: ctx.practiceId,
+    actor: ctx.actor,
+    action: "notification_preferences.updated",
+    resourceType: "patient",
+    resourceId: patientId,
+    channel: "WHATSAPP",
+    changes: {
+      before: before ? { whatsapp_opt_in: before.whatsapp_opt_in } : null,
+      after: { whatsapp_opt_in: optIn },
+    },
+  });
+  return true;
+}

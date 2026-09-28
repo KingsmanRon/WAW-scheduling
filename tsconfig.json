@@ -32,6 +32,9 @@
       "path": "packages/notifications"
     },
     {
+      "path": "packages/access"
+    },
+    {
       "path": "packages/integrations"
     },
     {

@@ -24,7 +24,8 @@
     "load": "tsx tests/load/profile.ts",
     "validate:infra": "bash infra/validate.sh",
     "check:secrets": "bash scripts/check-secrets.sh",
-    "tenant:bootstrap": "tsx packages/db/src/bootstrap-tenant.ts"
+    "tenant:bootstrap": "tsx packages/db/src/bootstrap-tenant.ts",
+    "channel:whatsapp:connect": "tsx apps/worker/src/cli/whatsapp-connect.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

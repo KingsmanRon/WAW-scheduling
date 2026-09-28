@@ -4,6 +4,7 @@ COPY package*.json ./
 COPY apps/core-api/package.json apps/core-api/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY apps/console/package.json apps/console/package.json
+COPY packages/access/package.json packages/access/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json

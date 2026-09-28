@@ -3,6 +3,9 @@
   "include": ["src"],
   "references": [
     {
+      "path": "../../packages/access"
+    },
+    {
       "path": "../../packages/config"
     },
     {
@@ -22,6 +25,9 @@
     },
     {
       "path": "../../packages/observability"
+    },
+    {
+      "path": "../../packages/patients"
     },
     {
       "path": "../../packages/policy"

@@ -444,3 +444,23 @@ export const integrationEventListQuerySchema = z
     limit: z.coerce.number().int().min(1).max(200).default(50),
   })
   .strict();
+
+// --- Conversations (staff) --------------------------------------------------
+
+export const conversationListQuerySchema = z
+  .object({
+    status: z.enum(["ACTIVE", "NEEDS_STAFF", "CLOSED"]).optional(),
+    before: instantSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+  })
+  .strict();
+export const staffReplySchema = z
+  .object({ body: z.string().trim().min(1).max(4096) })
+  .strict();
+export const resolveConversationSchema = z
+  .object({
+    status: z.enum(["ACTIVE", "CLOSED"]),
+    patient_id: id.nullable().optional(),
+    expected_version: version,
+  })
+  .strict();

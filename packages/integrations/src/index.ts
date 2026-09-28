@@ -6,3 +6,4 @@ export * from "./whatsapp.js";
 export * from "./emr-webhook.js";
 export * from "./smtp.js";
 export * from "./connections.js";
+export * from "./whatsapp-webhook.js";

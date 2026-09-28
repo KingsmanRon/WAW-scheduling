@@ -212,6 +212,8 @@ describe("worker startup configuration", () => {
     DATABASE_SSL: "require",
     CONNECTOR_KIND: "none",
     METRICS_TOKEN: "worker-metrics-token-at-least-32-characters",
+    IDENTIFIER_HASH_KEY:
+      "8f3c2b1a0e9d8c7b6a5f4e3d2c1b0a998877665544332211ffeeddccbbaa0099",
   };
   it("client-pilot REAL uses no connector (manual destination) and validates", () =>
     expect(loadWorkerConfig(pilotWorker).connector.capabilities).toEqual([]));
@@ -233,6 +235,7 @@ describe("worker startup configuration", () => {
       ACCESS_DEPLOYMENT_PROFILE: "synthetic-staging",
       ACCESS_DATA_MODE: "SYNTHETIC",
       WORKER_DATABASE_URL: "postgres://access_worker:secret@db.example.test/db",
+      IDENTIFIER_HASH_KEY: pilotWorker.IDENTIFIER_HASH_KEY,
       NOTIFICATION_RECIPIENT_ALLOWLIST: "+27820000001, QA@Example.com",
     });
     expect([...staging.notifications.allowList!]).toEqual([
@@ -243,6 +246,7 @@ describe("worker startup configuration", () => {
       loadWorkerConfig({
         NODE_ENV: "test",
         DATABASE_URL: "postgres://localhost/access",
+        IDENTIFIER_HASH_KEY: "07".repeat(32),
       }).notifications.allowList?.size,
     ).toBe(0);
     for (const [env, message] of [
@@ -263,6 +267,45 @@ describe("worker startup configuration", () => {
     ] as const)
       expect(
         problems(() => loadWorkerConfig({ ...pilotWorker, ...env })).join(),
+      ).toMatch(message);
+  });
+  it("the LLM intent classifier is off unless configured, and gated for real data", () => {
+    expect(loadWorkerConfig(pilotWorker).intentClassifier).toBeNull();
+    const llm = {
+      INTENT_CLASSIFIER: "anthropic",
+      ANTHROPIC_API_KEY: "sk-ant-api-key-for-config-tests-0123",
+    };
+    expect(
+      problems(() => loadWorkerConfig({ ...pilotWorker, ...llm })).join(),
+    ).toMatch(/INTENT_CLASSIFIER_PROCESSOR_APPROVED=true/);
+    expect(
+      loadWorkerConfig({
+        ...pilotWorker,
+        ...llm,
+        INTENT_CLASSIFIER_PROCESSOR_APPROVED: "true",
+      }).intentClassifier,
+    ).toEqual({
+      provider: "anthropic",
+      apiKey: llm.ANTHROPIC_API_KEY,
+      model: "claude-opus-5",
+      timeoutMs: 4000,
+      maxPerMinute: 120,
+    });
+    const approved = {
+      ...pilotWorker,
+      INTENT_CLASSIFIER_PROCESSOR_APPROVED: "true",
+    };
+    for (const [env, message] of [
+      [{ INTENT_CLASSIFIER: "openai" }, /off or anthropic/],
+      [{ INTENT_CLASSIFIER: "anthropic" }, /requires ANTHROPIC_API_KEY/],
+      [{ ...llm, INTENT_CLASSIFIER_MODEL: "gpt-4o" }, /Claude model id/],
+      [
+        { ...llm, INTENT_CLASSIFIER_TIMEOUT_MS: "60000" },
+        /between 0 and 15000/,
+      ],
+    ] as const)
+      expect(
+        problems(() => loadWorkerConfig({ ...approved, ...env })).join(),
       ).toMatch(message);
   });
   it("refuses the mock connector with real data, unknown and unimplemented capabilities and fault injection", () => {
@@ -301,6 +344,7 @@ describe("worker startup configuration", () => {
       loadWorkerConfig({
         NODE_ENV: "development",
         WORKER_DATABASE_URL: "postgres://access_worker:x@localhost/access",
+        IDENTIFIER_HASH_KEY: "07".repeat(32),
         CONNECTOR_KIND: "mock",
         CONNECTOR_CAPABILITIES: "",
       }).connector.capabilities,
