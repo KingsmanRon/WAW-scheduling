@@ -101,8 +101,13 @@ export function verifyDownloadLink(
 ): LinkClaims | null {
   const m = /^v1\.([A-Za-z0-9_-]{10,2000})\.([A-Za-z0-9_-]{43})$/.exec(token);
   if (!m) return null;
-  const expected = createHmac("sha256", key).update(`v1.${m[1]}`).digest();
-  const given = Buffer.from(m[2]!, "base64url");
+  // Compare the canonical encoding, not decoded bytes: the last of the 43
+  // characters carries two unused bits, so decoding would accept several
+  // spellings of one signature.
+  const expected = Buffer.from(
+    b64url(createHmac("sha256", key).update(`v1.${m[1]}`).digest()),
+  );
+  const given = Buffer.from(m[2]!);
   if (given.length !== expected.length || !timingSafeEqual(given, expected))
     return null;
   let claims: LinkClaims;

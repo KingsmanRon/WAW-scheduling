@@ -242,12 +242,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   app.get("/metrics", async (req, reply) => {
     if (deps.metricsToken) {
-      const given = req.headers.authorization ?? "";
-      const expected = `Bearer ${deps.metricsToken}`;
-      if (
-        given.length !== expected.length ||
-        !timingSafeEqual(Buffer.from(given), Buffer.from(expected))
-      )
+      const given = Buffer.from(req.headers.authorization ?? "");
+      const expected = Buffer.from(`Bearer ${deps.metricsToken}`);
+      if (given.length !== expected.length || !timingSafeEqual(given, expected))
         return reply.code(401).send({ error: "UNAUTHENTICATED" });
     }
     return reply

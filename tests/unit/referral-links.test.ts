@@ -37,6 +37,21 @@ describe("referral document download links", () => {
     for (const bad of ["", "v1.x.y", `${token}x`, token.replace("v1.", "v2.")])
       expect(verifyDownloadLink(key, bad, now), bad).toBeNull();
   });
+  it("accept exactly one spelling of a signature", () => {
+    // The 43rd character carries two unused bits: other spellings decode to
+    // the same bytes but are not the link that was issued.
+    const alphabet =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    for (let i = 0; i < 16; i++) {
+      const token = signDownloadLink(key, { ...claims, n: `nonce-${i}` });
+      const last = token.at(-1)!;
+      for (const ch of alphabet) {
+        if (ch === last) continue;
+        const variant = `${token.slice(0, -1)}${ch}`;
+        expect(verifyDownloadLink(key, variant, now), variant).toBeNull();
+      }
+    }
+  });
   it("are signed with a key derived from, never equal to, the storage key", () => {
     expect(key).toHaveLength(32);
     expect(key.equals(storageKey)).toBe(false);
