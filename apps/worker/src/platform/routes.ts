@@ -59,7 +59,10 @@ export function platformRoutes(plan: PlanEnvironment): OutboxRoutes {
           plan,
           e.aggregate_id,
           "CONFIRMED",
-          channelOf(e.payload.source_channel),
+          // Where it was confirmed: a waitlist offer taken in WhatsApp was
+          // already confirmed in the conversation.
+          channelOf(e.payload.confirmed_via) ??
+            channelOf(e.payload.source_channel),
         );
       }),
       ...emr("APPOINTMENT_CONFIRMED"),

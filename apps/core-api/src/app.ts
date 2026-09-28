@@ -41,6 +41,11 @@ import type { AuthContext, Authenticator } from "./auth.js";
 import { registerChannelRoutes } from "./channel-routes.js";
 import { registerMessagingRoutes } from "./messaging-routes.js";
 import { registerPracticeRoutes } from "./practice-routes.js";
+import {
+  registerReferralRoutes,
+  type ReferralDocumentDeps,
+} from "./referral-routes.js";
+import { registerWaitlistRoutes } from "./waitlist-routes.js";
 import { caseDetail, queue } from "./queries.js";
 import { CaseService } from "./service.js";
 
@@ -58,6 +63,8 @@ export interface AppDeps {
   integrationPolicy?: TargetPolicy;
   /** WhatsApp webhook credentials; absent: the channel is off. */
   whatsapp?: { appSecret: string; verifyToken: string } | null;
+  /** Referral document storage; absent: uploads and downloads are off. */
+  documents?: ReferralDocumentDeps | null;
 }
 declare module "fastify" {
   interface FastifyRequest {
@@ -296,6 +303,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     hasher: deps.hasher,
     metrics,
     whatsapp: deps.whatsapp ?? null,
+  });
+  await registerReferralRoutes(app, {
+    pool: deps.pool,
+    authenticator: deps.authenticator,
+    hasher: deps.hasher,
+    metrics,
+    documents: deps.documents ?? null,
+  });
+  await registerWaitlistRoutes(app, {
+    pool: deps.pool,
+    authenticator: deps.authenticator,
+    hasher: deps.hasher,
+    metrics,
   });
 
   // Referral intake (REFERRAL case type).

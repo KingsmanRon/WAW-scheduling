@@ -103,6 +103,15 @@ export const SCHEDULING_ERRORS = {
     422,
     "The referral does not cover this patient and appointment type.",
   ],
+  REFERRAL_TRANSITION_INVALID: [
+    409,
+    "The referral cannot make this change in its current state.",
+  ],
+  REFERRAL_CHANGED: [
+    409,
+    "The referral changed since it was loaded. Refresh and try again.",
+  ],
+  DOCUMENT_NOT_FOUND: [404, "The document was not found."],
   OVERRIDE_NOT_PERMITTED: [
     403,
     "Booking outside availability requires an override permission.",
@@ -115,6 +124,19 @@ export const SCHEDULING_ERRORS = {
   WAITLIST_DUPLICATE: [
     409,
     "The patient is already on the waitlist for this appointment type.",
+  ],
+  WAITLIST_ENTRY_CLOSED: [409, "The waitlist entry is no longer open."],
+  WAITLIST_ENTRY_CHANGED: [
+    409,
+    "The waitlist entry changed since it was loaded. Refresh and try again.",
+  ],
+  WAITLIST_WINDOW_INVALID: [
+    422,
+    "Choose dates that have not passed, spanning at most a year.",
+  ],
+  WAITLIST_SLOT_TOO_SOON: [
+    422,
+    "This time starts too soon for a waitlist offer to be answered.",
   ],
   // Schedule configuration.
   INVALID_TIMEZONE: [422, "The time zone is not a valid IANA time zone."],

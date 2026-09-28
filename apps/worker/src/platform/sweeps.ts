@@ -9,6 +9,7 @@ import { log, type Metrics } from "@access/observability";
 import {
   SYSTEM_SCHEDULING_ACTOR,
   expireStaleHolds,
+  expireWaitlistEntries,
   inPracticeTransaction,
   type CommandContext,
 } from "@access/scheduling";
@@ -64,6 +65,26 @@ export class Sweeps {
       );
     }
     if (expired) this.options.metrics?.inc("holds_expired_total", {}, expired);
+    return expired;
+  }
+
+  /** Waitlist entries whose last acceptable date has passed. */
+  async expireWaitlistEntries(tenantId: string): Promise<number> {
+    let expired = 0;
+    for (const practiceId of await this.practices(tenantId)) {
+      const ctx: CommandContext = {
+        tenantId,
+        practiceId,
+        actor: { ...SYSTEM_SCHEDULING_ACTOR, id: "system:waitlist" },
+        channel: "INTERNAL",
+        correlationId: randomUUID(),
+      };
+      expired += await inPracticeTransaction(this.pool, ctx, (c) =>
+        expireWaitlistEntries(c, ctx),
+      );
+    }
+    if (expired)
+      this.options.metrics?.inc("waitlist_entries_expired_total", {}, expired);
     return expired;
   }
 

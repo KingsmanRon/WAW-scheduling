@@ -25,6 +25,7 @@ import {
   type ArtifactScanner,
 } from "../../apps/core-api/src/scanner.js";
 import { CaseService } from "../../apps/core-api/src/service.js";
+import { downloadLinkKey } from "../../apps/core-api/src/referral-routes.js";
 import {
   LocalEncryptedArtifactStore,
   type ArtifactStore,
@@ -154,6 +155,12 @@ export async function testApi(
     info: { profile: "local", dataMode: "SYNTHETIC", buildId: "test" },
     integrationPolicy: { allowInsecure: options.allowPrivateTargets ?? false },
     whatsapp: options.whatsapp ?? null,
+    documents: {
+      store,
+      scanner: options.scanner ?? new MockSyntheticScanner(),
+      linkKey: downloadLinkKey(Buffer.alloc(32, 9)),
+      retentionDays: 30,
+    },
   });
   return { app, service, artifactRoot, store, close: () => app.close() };
 }

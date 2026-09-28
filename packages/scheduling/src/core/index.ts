@@ -6,3 +6,5 @@ export * from "./lifecycle.js";
 export * from "./queries.js";
 export * from "./configuration.js";
 export * from "./transaction.js";
+export * from "./referrals.js";
+export * from "./waitlist.js";

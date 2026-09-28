@@ -45,8 +45,9 @@ import {
  * offers and hold expiry.
  *
  * Lock order (every command, so concurrent commands cannot deadlock):
- *   practitioners (by id) -> referral -> slot holds -> appointments
- *   (a replacement before the appointment it replaces).
+ *   practitioners (by id) -> referral -> waitlist entry -> waitlist offers
+ *   -> slot holds -> appointments (a replacement before the appointment it
+ *   replaces).
  * Under those locks the rules are re-checked against committed data; the
  * database exclusion constraint remains the last line of defence against a
  * double booking (translated to SLOT_UNAVAILABLE).
@@ -93,7 +94,11 @@ async function prepareBooking(
   ctx: CommandContext,
   target: BookingTarget,
   locked: Map<string, PractitionerRow>,
-  options: { override: boolean; excludeIds: string[] },
+  options: {
+    override: boolean;
+    excludeIds: string[];
+    waitlistEntryId?: string | null | undefined;
+  },
 ): Promise<Prepared> {
   if (
     options.override &&
@@ -119,6 +124,8 @@ async function prepareBooking(
   const referral = target.referralId
     ? await lockReferral(c, ctx, target.referralId, options.excludeIds)
     : null;
+  if (options.waitlistEntryId)
+    await lockOpenWaitlistEntry(c, ctx, options.waitlistEntryId, target);
   const end = new Date(+target.start + type.durationMinutes * MINUTE_MS);
   assertBookingEligibility({
     actor: ctx.actor.type,
@@ -285,6 +292,7 @@ export async function bookAppointment(
   const p = await prepareBooking(c, ctx, input, locked, {
     override,
     excludeIds: [],
+    waitlistEntryId: input.waitlistEntryId,
   });
   const id = randomUUID();
   await insertAppointment(c, ctx, p, input, {
@@ -294,6 +302,8 @@ export async function bookAppointment(
     notes: input.notes ?? null,
     override,
   });
+  if (input.waitlistEntryId)
+    await closeWaitlistEntry(c, ctx, input.waitlistEntryId, id);
   await appendAppointmentEvent(c, ctx, {
     appointmentId: id,
     eventType: "CONFIRMED",
@@ -363,6 +373,7 @@ export async function createHold(
   const p = await prepareBooking(c, ctx, target, locked, {
     override: false,
     excludeIds: original ? [original.id] : [],
+    waitlistEntryId: original ? null : input.waitlistEntryId,
   });
   if (original) {
     // Lock order: holds after the referral (taken in prepareBooking).
@@ -518,6 +529,13 @@ export async function confirmHold(
         peek.appointmentId,
       ])
     : null;
+  if (peekAppointment.waitlistEntryId)
+    await lockOpenWaitlistEntry(
+      c,
+      ctx,
+      peekAppointment.waitlistEntryId,
+      peekAppointment,
+    );
   const hold = await readHold(c, ctx, holdId, true);
   const now = await databaseNow(c);
   assertHoldUsable(hold, now);
@@ -578,6 +596,13 @@ export async function confirmHold(
     [ctx.tenantId, ctx.practiceId, appointment.id, input.notes ?? null],
   );
   const f = appointmentFacts({ ...appointment, status: "CONFIRMED" });
+  if (appointment.waitlistEntryId)
+    await closeWaitlistEntry(
+      c,
+      ctx,
+      appointment.waitlistEntryId,
+      appointment.id,
+    );
   if (hold.purpose === "RESCHEDULE" && hold.rescheduleOfId) {
     const previous = await readAppointment(c, ctx, hold.rescheduleOfId, true);
     assertTransition(previous.status, "RESCHEDULED");
@@ -631,6 +656,9 @@ export async function confirmHold(
       {
         ...f,
         source_channel: appointment.sourceChannel,
+        // Where the patient or staff confirmed it (a waitlist offer is
+        // held by the system and accepted through a channel).
+        confirmed_via: ctx.channel,
         referral_id: appointment.referralId,
         waitlist_entry_id: appointment.waitlistEntryId,
       },
@@ -647,6 +675,118 @@ export async function confirmHold(
     });
   }
   return appointment.id;
+}
+
+/**
+ * A booking for a waitlisted patient must match their open entry. Lock
+ * order: after the practitioner and referral, before offers, holds and
+ * appointments.
+ */
+async function lockOpenWaitlistEntry(
+  c: DbClient,
+  ctx: CommandContext,
+  entryId: string,
+  target: { patientId: string; appointmentTypeId: string },
+): Promise<void> {
+  const r = await c.query<{
+    patient_id: string;
+    appointment_type_id: string;
+    status: string;
+  }>(
+    `SELECT patient_id, appointment_type_id, status FROM scheduling.waitlist_entries
+      WHERE tenant_id=$1 AND practice_id=$2 AND id=$3 FOR UPDATE`,
+    [ctx.tenantId, ctx.practiceId, entryId],
+  );
+  const e = r.rows[0];
+  if (
+    !e ||
+    e.patient_id !== target.patientId ||
+    e.appointment_type_id !== target.appointmentTypeId
+  )
+    throw new SchedulingError("WAITLIST_ENTRY_NOT_FOUND");
+  if (e.status !== "ACTIVE" && e.status !== "OFFERED")
+    throw new SchedulingError("WAITLIST_ENTRY_CLOSED");
+}
+
+/**
+ * The waitlisted patient is booked: their entry closes (BOOKED), the offer
+ * behind this appointment (if any) is accepted and any other offer still
+ * pending for the entry is withdrawn, its slot released.
+ */
+async function closeWaitlistEntry(
+  c: DbClient,
+  ctx: CommandContext,
+  entryId: string,
+  appointmentId: string,
+): Promise<void> {
+  const offers = await c.query<{
+    id: string;
+    appointment_id: string;
+    practitioner_id: string;
+    location_id: string;
+    starts_at: Date;
+    future: boolean;
+  }>(
+    `SELECT id, appointment_id, practitioner_id, location_id, starts_at, starts_at > now() AS future
+       FROM scheduling.waitlist_offers
+      WHERE tenant_id=$1 AND practice_id=$2 AND waitlist_entry_id=$3 AND status='PENDING'
+      ORDER BY id FOR UPDATE`,
+    [ctx.tenantId, ctx.practiceId, entryId],
+  );
+  for (const o of offers.rows) {
+    const accepted = o.appointment_id === appointmentId;
+    if (!accepted) {
+      const hold = await c.query<{ id: string }>(
+        `SELECT id FROM scheduling.slot_holds
+          WHERE tenant_id=$1 AND practice_id=$2 AND appointment_id=$3 AND status='ACTIVE'`,
+        [ctx.tenantId, ctx.practiceId, o.appointment_id],
+      );
+      if (hold.rows[0])
+        await releaseHold(c, ctx, hold.rows[0].id, { internal: true });
+      // The slot this patient no longer needs goes to the next one.
+      if (o.future)
+        await emit(
+          c,
+          ctx,
+          "WAITLIST_SLOT_AVAILABLE",
+          { type: "practitioner", id: o.practitioner_id },
+          {
+            practitioner_id: o.practitioner_id,
+            location_id: o.location_id,
+            starts_at: o.starts_at.toISOString(),
+          },
+        );
+    }
+    await c.query(
+      `UPDATE scheduling.waitlist_offers
+          SET status=$4, responded_at=CASE WHEN $4='ACCEPTED' THEN now() END, response_channel=$5,
+              version=version+1, updated_at=now()
+        WHERE tenant_id=$1 AND practice_id=$2 AND id=$3`,
+      [
+        ctx.tenantId,
+        ctx.practiceId,
+        o.id,
+        accepted ? "ACCEPTED" : "WITHDRAWN",
+        accepted
+          ? ctx.actor.type === "SYSTEM"
+            ? "SYSTEM"
+            : ctx.channel
+          : null,
+      ],
+    );
+  }
+  await c.query(
+    `UPDATE scheduling.waitlist_entries
+        SET status='BOOKED', booked_appointment_id=$4, closed_at=now(), closed_by=$5, version=version+1, updated_at=now()
+      WHERE tenant_id=$1 AND practice_id=$2 AND id=$3`,
+    [ctx.tenantId, ctx.practiceId, entryId, appointmentId, ctx.actor.id],
+  );
+  await audit(c, ctx, {
+    action: "waitlist.entry_booked",
+    resourceType: "waitlist_entry",
+    resourceId: entryId,
+    after: { status: "BOOKED", appointment_id: appointmentId },
+  });
 }
 
 async function markRescheduled(

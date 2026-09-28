@@ -55,6 +55,16 @@ export interface Authenticator {
     headers: Headers,
     practiceId: string,
   ): Promise<PracticeAuthContext>;
+  /**
+   * Re-check, without a request, that an actor still has access to a
+   * practice (e.g. when a signed download link is used): their current
+   * practice role, or null.
+   */
+  currentPracticeRole(
+    actor: { id: string; role: PracticeRole | null },
+    tenantId: string,
+    practiceId: string,
+  ): Promise<PracticeRole | null>;
   /** The caller's active practice memberships. */
   listPractices(headers: Headers): Promise<PracticeMembershipView[]>;
 }
@@ -188,6 +198,25 @@ export class JwtAuthenticator implements Authenticator {
       actor: { type: "STAFF", id: `user:${sub}`, role: m.role },
     };
   }
+  async currentPracticeRole(
+    actor: { id: string },
+    tenantId: string,
+    practiceId: string,
+  ): Promise<PracticeRole | null> {
+    const sub = actor.id.startsWith("user:") ? actor.id.slice(5) : "";
+    if (!UUID.test(sub) || !UUID.test(practiceId)) return null;
+    const row = await userTx(
+      sub,
+      (c) =>
+        c.query<PracticeMembershipView>(
+          `${MEMBERSHIP_SELECT} AND m.practice_id=$2`,
+          [sub, practiceId],
+        ),
+      this.pool,
+    );
+    const m = row.rows[0];
+    return m && m.tenant_id === tenantId ? m.role : null;
+  }
   async listPractices(headers: Headers): Promise<PracticeMembershipView[]> {
     const sub = await this.identify(headers);
     const rows = await userTx(
@@ -280,6 +309,26 @@ export class SyntheticAuthenticator implements Authenticator {
       mode: this.mode,
       actor: { type: "STAFF", id: `synthetic:${user}`, role },
     };
+  }
+  /** Synthetic roles are asserted per request: the practice must exist. */
+  async currentPracticeRole(
+    actor: { id: string; role: PracticeRole | null },
+    tenantId: string,
+    practiceId: string,
+  ): Promise<PracticeRole | null> {
+    if (!this.pool || !actor.role || !actor.id.startsWith("synthetic:"))
+      return null;
+    const practice = await tenantTx(
+      tenantId,
+      (c) =>
+        c.query(
+          "SELECT 1 FROM directory.practices WHERE tenant_id=$1 AND id=$2 AND status='ACTIVE'",
+          [tenantId, practiceId],
+        ),
+      this.pool,
+      { practiceId },
+    );
+    return practice.rowCount ? actor.role : null;
   }
   async listPractices(headers: Headers): Promise<PracticeMembershipView[]> {
     if (!this.pool) return [];

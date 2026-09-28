@@ -22,6 +22,7 @@ import { IdentifierHasher } from "@access/patients";
 import { IntegrationDispatcher } from "./integrations.js";
 import { OutboxRouter, type OutboxRoutes } from "./outbox.js";
 import { extendRoutes, platformRoutes } from "./routes.js";
+import { waitlistRoutes } from "./waitlist.js";
 import { JobRunner, type Job } from "./runner.js";
 import { Sweeps } from "./sweeps.js";
 
@@ -29,6 +30,7 @@ export * from "./outbox.js";
 export * from "./routes.js";
 export * from "./integrations.js";
 export * from "./sweeps.js";
+export * from "./waitlist.js";
 export * from "./runner.js";
 export * from "./health.js";
 
@@ -155,6 +157,15 @@ export function describeWorkerMetrics(metrics: Metrics): void {
       "channel_messages_failed_total",
       "Conversation replies that failed",
     )
+    .describe("waitlist_offers_total", "Freed slots offered, by outcome")
+    .describe(
+      "waitlist_candidates_skipped_total",
+      "Waitlisted patients passed over for a slot, by reason",
+    )
+    .describe(
+      "waitlist_entries_expired_total",
+      "Waitlist entries past their last date",
+    )
     .describe(
       "intent_classifier_requests_total",
       "Free-text classifications, by outcome",
@@ -229,6 +240,7 @@ export function createPlatformWorker(
   });
   const routes = extendRoutes((deps.routes ?? platformRoutes)(plan), {
     CHANNEL_MESSAGE_RECEIVED: [conversations],
+    ...waitlistRoutes(plan, metrics),
   });
   const outbound = new OutboundDispatcher(pool, {
     sender: deps.sessions ?? whatsAppClients(config, env),
@@ -270,6 +282,11 @@ export function createPlatformWorker(
     { name: "notifications", everyMs: 0, run: (t) => notifications.run(t) },
     { name: "integrations", everyMs: 0, run: (t) => integrations.run(t) },
     { name: "hold_expiry", everyMs: 15_000, run: (t) => sweeps.expireHolds(t) },
+    {
+      name: "waitlist_expiry",
+      everyMs: 3_600_000,
+      run: (t) => sweeps.expireWaitlistEntries(t),
+    },
     {
       name: "reminder_reconciliation",
       everyMs: 10 * 60_000,

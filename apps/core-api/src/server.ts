@@ -3,6 +3,7 @@ import { createPool, verifyRuntimeIdentity } from "@access/db";
 import { configureLogging, log } from "@access/observability";
 import { IdentifierHasher } from "@access/patients";
 import { buildApp } from "./app.js";
+import { downloadLinkKey } from "./referral-routes.js";
 import { JwtAuthenticator, SyntheticAuthenticator } from "./auth.js";
 import { IntakeExtractor } from "./extraction.js";
 import {
@@ -91,6 +92,12 @@ const app = await buildApp({
     allowInsecure: config.integrations.allowPrivateTargets,
   },
   whatsapp: config.whatsapp,
+  documents: {
+    store: artifacts,
+    scanner,
+    linkKey: downloadLinkKey(config.encryptionKey),
+    retentionDays: config.storage.retentionDays,
+  },
   corsOrigins: config.corsOrigins,
   info: {
     profile: config.profile,

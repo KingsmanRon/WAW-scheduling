@@ -8,9 +8,11 @@ import {
 } from "@access/patients";
 import {
   SchedulingError,
+  acceptWaitlistOffer,
   cancelAppointment,
   confirmHold,
   createHold,
+  declineWaitlistOffer,
   getPracticeSettings,
   listAppointmentTypes,
   listAppointments,
@@ -128,6 +130,9 @@ export interface StateData {
 }
 /** A conversation left mid-flow resets after this long. */
 const STATE_TTL_MS = 30 * 60_000;
+/** Template button payloads of waitlist offers (see the notification catalogue). */
+const OFFER_REPLY =
+  /^OFFER:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):(ACCEPT|DECLINE)$/;
 /** What a classifier may turn free text into. */
 const CLASSIFIABLE: ReadonlySet<Intent["kind"]> = new Set([
   "BOOK",
@@ -265,6 +270,10 @@ class Turn {
     if (intent.kind === "UNSUPPORTED") return this.say(UNSUPPORTED);
     if (intent.kind === "OPT_OUT") return this.consent(false);
     if (intent.kind === "OPT_IN") return this.consent(true);
+    // A waitlist offer's Book it / No thanks buttons: an explicit answer,
+    // honoured even while staff hold the conversation.
+    const offer = intent.kind === "CHOICE" ? OFFER_REPLY.exec(intent.id) : null;
+    if (offer) return this.answerOffer(offer[1]!, offer[2] === "ACCEPT");
     const wantsMenu = intent.kind === "MENU" || isChoice(intent, "M:MENU");
     if (this.status === "NEEDS_STAFF") {
       // A person is handling this conversation: stay quiet unless the
@@ -382,6 +391,83 @@ class Turn {
   // ---------------------------------------------------------------------
   // Global actions
   // ---------------------------------------------------------------------
+
+  /**
+   * Answer a waitlist offer. The offer must be for a patient registered with
+   * this number; the Scheduling Core checks it is theirs and still open,
+   * and re-checks every booking rule before confirming.
+   */
+  private async answerOffer(offerId: string, accept: boolean) {
+    const r = await this.c.query<{
+      patient_id: string;
+      starts_at: Date;
+      timezone: string;
+      practitioner: string;
+      location: string;
+    }>(
+      `SELECT e.patient_id, o.starts_at, l.timezone, pr.display_name AS practitioner, l.name AS location
+         FROM scheduling.waitlist_offers o
+         JOIN scheduling.waitlist_entries e ON e.tenant_id=o.tenant_id AND e.practice_id=o.practice_id AND e.id=o.waitlist_entry_id
+         JOIN scheduling.practitioners pr ON pr.tenant_id=o.tenant_id AND pr.practice_id=o.practice_id AND pr.id=o.practitioner_id
+         JOIN directory.practice_locations l ON l.tenant_id=o.tenant_id AND l.practice_id=o.practice_id AND l.id=o.location_id
+        WHERE o.tenant_id=$1 AND o.practice_id=$2 AND o.id=$3`,
+      [this.scope.tenantId, this.scope.practiceId, offerId],
+    );
+    const offer = r.rows[0];
+    const registered = offer
+      ? (
+          await patientsByPhone(
+            this.c,
+            this.scope,
+            this.conv.participant_address,
+          )
+        ).some((p) => p.id === offer.patient_id)
+      : false;
+    if (!offer || !registered) {
+      this.say(
+        text("Sorry, I couldn't find that offer. Reply MENU for options."),
+      );
+      return;
+    }
+    const ctx = this.ctx(offer.patient_id);
+    const answered = await this.core<unknown>(() =>
+      accept
+        ? acceptWaitlistOffer(this.c, ctx, offerId)
+        : declineWaitlistOffer(this.c, ctx, offerId),
+    );
+    this.patientId ??= offer.patient_id;
+    if (answered.ok) {
+      this.say(
+        text(
+          accept
+            ? `You're booked for ${longWhen(new Date(offer.starts_at), offer.timezone)} with ${offer.practitioner} · ${offer.location}. ` +
+                "Reply MENU to see your appointments, or to cancel or reschedule."
+            : "No problem - you're still on our waitlist, and we'll let you know if another time comes up.",
+        ),
+      );
+      return;
+    }
+    if (
+      answered.code === "WAITLIST_OFFER_EXPIRED" ||
+      answered.code === "HOLD_EXPIRED"
+    )
+      this.say(
+        text(
+          "Sorry, that offer has lapsed and the time may have gone to someone else. You're still on our waitlist.",
+        ),
+      );
+    else if (answered.code === "WAITLIST_OFFER_NOT_PENDING")
+      this.say(
+        text(
+          "You've already answered this offer. Reply MENU to see your appointments.",
+        ),
+      );
+    else
+      await this.handoff(
+        "BOOKING_FAILED",
+        "Sorry, I couldn't book that time for you.",
+      );
+  }
 
   private async showMenu(intro?: string) {
     const p = await this.practiceInfo();

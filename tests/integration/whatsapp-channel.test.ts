@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { PracticeRole } from "../../packages/contracts/src/index.js";
-import {
-  provisionWhatsApp,
-  type Intent,
-  type IntentClassifier,
+import type {
+  Intent,
+  IntentClassifier,
 } from "../../packages/access/src/index.js";
 import { bookAppointment } from "../../packages/scheduling/src/index.js";
 import {
@@ -23,42 +22,21 @@ import {
   testPlatform,
   type TestPlatform,
 } from "../support/platform.js";
+import { newPatient, run, slot, staffCtx } from "../support/scheduling.js";
 import {
-  newPatient,
-  newPractice,
-  run,
-  slot,
-  staffCtx,
-  type TestPractice,
-} from "../support/scheduling.js";
-
-const APP_SECRET = "meta-app-secret-for-tests-0011223344";
-const VERIFY_TOKEN = "verify-token-for-tests-12345";
-const WEBHOOK = "/v1/channels/whatsapp/webhook";
-
-interface Reply {
-  type: string;
-  text: string;
-  options: string[];
-  titles: string[];
-}
-/** The Graph API request bodies the fixture records. */
-interface SentMessage {
-  type: string;
-  text?: { body: string };
-  interactive?: {
-    type: string;
-    body: { text: string };
-    action: {
-      buttons?: { reply: { id: string; title: string } }[];
-      sections?: { rows: { id: string; title: string }[] }[];
-    };
-  };
-}
+  APP_SECRET,
+  VERIFY_TOKEN,
+  WEBHOOK,
+  appointmentsOf,
+  conversationOf,
+  mobileOf,
+  whatsAppHarness,
+} from "../support/whatsapp.js";
 
 describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
   let api: TestApi;
   let graph: GraphApiFixture;
+  let wa: ReturnType<typeof whatsAppHarness>;
   beforeAll(async () => {
     graph = new GraphApiFixture(WHATSAPP_TOKEN);
     await graph.start();
@@ -66,168 +44,24 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
       auth: "jwt",
       whatsapp: { appSecret: APP_SECRET, verifyToken: VERIFY_TOKEN },
     });
+    wa = whatsAppHarness(api, graph);
   });
   afterAll(async () => {
     await api.close();
     await graph.stop();
     await closePools();
   });
-
-  const sign = (raw: string) =>
-    `sha256=${createHmac("sha256", APP_SECRET).update(raw).digest("hex")}`;
-  const post = (raw: string, signature: string | null = sign(raw)) =>
-    api.app.inject({
-      method: "POST",
-      url: WEBHOOK,
-      headers: {
-        "content-type": "application/json",
-        ...(signature ? { "x-hub-signature-256": signature } : {}),
-      },
-      payload: raw,
-    });
-  const envelope = (phoneNumberId: string, value: Record<string, unknown>) =>
-    JSON.stringify({
-      object: "whatsapp_business_account",
-      entry: [
-        {
-          id: "WABA-TEST",
-          changes: [
-            {
-              field: "messages",
-              value: {
-                messaging_product: "whatsapp",
-                metadata: {
-                  display_phone_number: "27110000000",
-                  phone_number_id: phoneNumberId,
-                },
-                ...value,
-              },
-            },
-          ],
-        },
-      ],
-    });
-
-  /** A practice on WhatsApp, as the operator provisions it. */
-  async function channelPractice(classifier?: IntentClassifier) {
-    const p = await newPractice();
-    const phoneNumberId = String(
-      1_000_000_000 + Math.floor(Math.random() * 8_999_999_999),
-    );
-    await provisionWhatsApp(ownerPool(), {
-      tenantId: p.tenantId,
-      practiceId: p.practiceId,
-      name: "Practice WhatsApp",
-      secretRef: "WHATSAPP_TEST_TOKEN",
-      active: true,
-      operator: "operator:test",
-      config: {
-        phone_number_id: phoneNumberId,
-        default_language: "en",
-        templates: {},
-      },
-    });
-    const platform = testPlatform(p.tenantId, {
-      graphUrl: graph.url,
-      ...(classifier ? { classifier } : {}),
-    });
-    return { p, phoneNumberId, platform };
-  }
-
-  /** A patient's phone talking to the practice's WhatsApp number. */
-  class Phone {
-    constructor(
-      readonly number: string,
-      readonly phoneNumberId: string,
-      readonly platform: TestPlatform,
-    ) {}
-    async send(
-      content: { text: string } | { tap: string; title?: string },
-      id = `wamid.in.${randomUUID().replace(/-/g, "")}`,
-    ) {
-      const message =
-        "text" in content
-          ? { type: "text", text: { body: content.text } }
-          : {
-              type: "interactive",
-              interactive: {
-                type: "button_reply",
-                button_reply: {
-                  id: content.tap,
-                  title: content.title ?? "option",
-                },
-              },
-            };
-      const response = await post(
-        envelope(this.phoneNumberId, {
-          contacts: [
-            { profile: { name: "Patient" }, wa_id: this.number.slice(1) },
-          ],
-          messages: [
-            {
-              from: this.number.slice(1),
-              id,
-              timestamp: String(Math.floor(Date.now() / 1000)),
-              ...message,
-            },
-          ],
-        }),
-      );
-      expect(response.statusCode).toBe(200);
-      await this.platform.drain();
-      return id;
-    }
-    replies(): Reply[] {
-      return graph
-        .messages()
-        .filter((m) => m.body.to === this.number.slice(1))
-        .map((m) => {
-          const b = m.body as unknown as SentMessage;
-          if (b.type === "text" && b.text)
-            return { type: "text", text: b.text.body, options: [], titles: [] };
-          if (b.type === "interactive" && b.interactive) {
-            const i = b.interactive;
-            const rows =
-              i.type === "button"
-                ? (i.action.buttons ?? []).map((x) => x.reply)
-                : (i.action.sections?.[0]?.rows ?? []);
-            return {
-              type: i.type,
-              text: i.body.text,
-              options: rows.map((r) => r.id),
-              titles: rows.map((r) => r.title),
-            };
-          }
-          return { type: b.type, text: "", options: [], titles: [] };
-        });
-    }
-    last(): Reply {
-      return this.replies().at(-1)!;
-    }
-  }
-  const mobileOf = async (patientId: string) =>
-    (
-      await ownerPool().query(
-        "SELECT value FROM directory.patient_contacts WHERE patient_id=$1 AND kind='MOBILE'",
-        [patientId],
-      )
-    ).rows[0].value as string;
-  const conversationOf = async (p: TestPractice, number: string) =>
-    (
-      await ownerPool().query(
-        `SELECT id, status, needs_staff_reason, state, state_data, patient_id, version
-           FROM messaging.channel_conversations WHERE tenant_id=$1 AND participant_address=$2`,
-        [p.tenantId, number],
-      )
-    ).rows[0];
-  const appointmentsOf = async (p: TestPractice, patientId: string) =>
-    (
-      await ownerPool().query(
-        `SELECT id, status, starts_at, source_channel, booked_by_actor_type, rescheduled_from_id, cancellation_reason_code
-           FROM scheduling.appointments WHERE tenant_id=$1 AND patient_id=$2 ORDER BY created_at`,
-        [p.tenantId, patientId],
-      )
-    ).rows;
+  const post = (raw: string, signature?: string | null) =>
+    signature === undefined ? wa.post(raw) : wa.post(raw, signature);
+  const envelope = (id: string, value: Record<string, unknown>) =>
+    wa.envelope(id, value);
+  const channelPractice = (classifier?: IntentClassifier) =>
+    wa.channelPractice(classifier ? { classifier } : {});
+  const phoneOf = (
+    number: string,
+    phoneNumberId: string,
+    platform: TestPlatform,
+  ) => new wa.Phone(number, phoneNumberId, platform);
 
   it("verifies the subscription and refuses unsigned or unrouted notifications", async () => {
     const ok = await api.app.inject({
@@ -265,7 +99,7 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
   it("a known patient books end to end; the Scheduling Core records it once", async () => {
     const { p, phoneNumberId, platform } = await channelPractice();
     const patient = await newPatient(p);
-    const phone = new Phone(await mobileOf(patient), phoneNumberId, platform);
+    const phone = phoneOf(await mobileOf(patient), phoneNumberId, platform);
 
     const hi = await phone.send({ text: "Hi" });
     expect(phone.last()).toMatchObject({
@@ -324,7 +158,7 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
 
   it("a new number registers, gives consent and books", async () => {
     const { p, phoneNumberId, platform } = await channelPractice();
-    const phone = new Phone(
+    const phone = phoneOf(
       `+2783${String(Date.now()).slice(-7)}`,
       phoneNumberId,
       platform,
@@ -377,7 +211,7 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
   it("a patient reschedules and then cancels through WhatsApp", async () => {
     const { p, phoneNumberId, platform } = await channelPractice();
     const patient = await newPatient(p);
-    const phone = new Phone(await mobileOf(patient), phoneNumberId, platform);
+    const phone = phoneOf(await mobileOf(patient), phoneNumberId, platform);
     const ctx = staffCtx(p);
     const original = await run(ctx, (c) =>
       bookAppointment(c, ctx, {
@@ -424,7 +258,7 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
   it("offers fresh times when the chosen one was taken meanwhile", async () => {
     const { p, phoneNumberId, platform } = await channelPractice();
     const patient = await newPatient(p);
-    const phone = new Phone(await mobileOf(patient), phoneNumberId, platform);
+    const phone = phoneOf(await mobileOf(patient), phoneNumberId, platform);
     await phone.send({ text: "book" });
     const offered = (await conversationOf(p, phone.number)).state_data.slots[0];
     // Reception books that exact time for someone else on the phone.
@@ -456,7 +290,7 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
   it("never acts on an option the conversation did not offer", async () => {
     const { p, phoneNumberId, platform } = await channelPractice();
     const patient = await newPatient(p);
-    const phone = new Phone(await mobileOf(patient), phoneNumberId, platform);
+    const phone = phoneOf(await mobileOf(patient), phoneNumberId, platform);
     await phone.send({ text: "book" });
     await phone.send({ tap: "S:42" });
     expect(phone.last().text).toMatch(/choose one of the times/);
@@ -474,7 +308,7 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
   it("stops on a possible emergency and hands over to staff, who reply and hand back", async () => {
     const { p, phoneNumberId, platform } = await channelPractice();
     const patient = await newPatient(p);
-    const phone = new Phone(await mobileOf(patient), phoneNumberId, platform);
+    const phone = phoneOf(await mobileOf(patient), phoneNumberId, platform);
     await phone.send({ text: "book" });
     await phone.send({ text: "my father has chest pain" });
     expect(phone.last().text).toMatch(/10177 or 112/);
@@ -568,7 +402,7 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
     };
     const { p, phoneNumberId, platform } = await channelPractice(classifier);
     const patient = await newPatient(p);
-    const phone = new Phone(await mobileOf(patient), phoneNumberId, platform);
+    const phone = phoneOf(await mobileOf(patient), phoneNumberId, platform);
 
     await phone.send({ text: "my son needs a check-up next week" });
     expect(phone.last()).toMatchObject({ type: "list" });
@@ -605,7 +439,7 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
     const { p, phoneNumberId, platform } = await channelPractice();
     const patient = await newPatient(p);
     await consent(p, patient, { whatsapp: true });
-    const phone = new Phone(await mobileOf(patient), phoneNumberId, platform);
+    const phone = phoneOf(await mobileOf(patient), phoneNumberId, platform);
     await phone.send({ text: "Hi" });
     const sent = (
       await ownerPool().query(

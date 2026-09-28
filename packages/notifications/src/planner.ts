@@ -148,7 +148,7 @@ export async function planDelivery(
   data: RecipientData,
   m: PlannedMessage,
   patientArchived = false,
-): Promise<boolean> {
+): Promise<{ inserted: boolean; skip: SkipReason | null }> {
   const setup: ChannelSetup = {
     whatsappConnectionId: data.whatsapp?.id ?? null,
     emailConfigured: env.emailConfigured,
@@ -200,7 +200,7 @@ export async function planDelivery(
       s.sourceEventId,
     ],
   );
-  return (inserted.rowCount ?? 0) > 0;
+  return { inserted: (inserted.rowCount ?? 0) > 0, skip };
 }
 
 /**
@@ -266,7 +266,9 @@ export async function planAppointmentMessages(
   }
   let planned = 0;
   for (const m of messages)
-    if (await planDelivery(c, s, env, a.patient_id, data, m, archived))
+    if (
+      (await planDelivery(c, s, env, a.patient_id, data, m, archived)).inserted
+    )
       planned++;
   return planned;
 }
@@ -306,7 +308,7 @@ export async function planCancellationNotice(
   const start = new Date(a.starts_at);
   if (+start <= +now) return 0;
   const data = await loadRecipientData(c, s, a.patient_id);
-  const planned = await planDelivery(
+  const { inserted } = await planDelivery(
     c,
     s,
     env,
@@ -324,5 +326,49 @@ export async function planCancellationNotice(
     },
     a.patient_status === "ARCHIVED",
   );
-  return planned ? 1 : 0;
+  return inserted ? 1 : 0;
+}
+
+/**
+ * A waitlist offer: the patient is told a slot is theirs to take until the
+ * offer lapses (WhatsApp buttons Book it / No thanks; e-mail asks them to
+ * contact the practice). Returns why no message can reach the patient, if
+ * so - the caller then offers the slot to someone who can be told.
+ */
+export async function planWaitlistOffer(
+  c: DbClient,
+  s: PlanScope,
+  env: PlanEnvironment,
+  offerId: string,
+): Promise<SkipReason | null> {
+  const r = await c.query<{
+    starts_at: Date;
+    patient_id: string;
+    patient_status: string;
+  }>(
+    `SELECT o.starts_at, e.patient_id, pt.status AS patient_status
+       FROM scheduling.waitlist_offers o
+       JOIN scheduling.waitlist_entries e ON e.tenant_id=o.tenant_id AND e.practice_id=o.practice_id AND e.id=o.waitlist_entry_id
+       JOIN directory.patients pt ON pt.tenant_id=e.tenant_id AND pt.practice_id=e.practice_id AND pt.id=e.patient_id
+      WHERE o.tenant_id=$1 AND o.practice_id=$2 AND o.id=$3 AND o.status='PENDING'`,
+    [s.tenantId, s.practiceId, offerId],
+  );
+  const offer = r.rows[0];
+  if (!offer) return "APPOINTMENT_CHANGED";
+  const data = await loadRecipientData(c, s, offer.patient_id);
+  const { skip } = await planDelivery(
+    c,
+    s,
+    env,
+    offer.patient_id,
+    data,
+    {
+      type: "WAITLIST_OFFER",
+      scheduledFor: env.now(),
+      dedupKey: `WAITLIST_OFFER:${offerId}`,
+      waitlistOfferId: offerId,
+    },
+    offer.patient_status === "ARCHIVED",
+  );
+  return skip;
 }

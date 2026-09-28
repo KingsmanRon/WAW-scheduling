@@ -464,3 +464,124 @@ export const resolveConversationSchema = z
     expected_version: version,
   })
   .strict();
+
+// --- Referral register ----------------------------------------------------
+
+const referrerName = z.string().trim().min(1).max(120);
+export const REFERRAL_STATUSES = [
+  "RECEIVED",
+  "VERIFIED",
+  "REJECTED",
+  "CANCELLED",
+] as const;
+export const referralSchema = z
+  .object({
+    patient_id: id,
+    referring_practitioner_name: referrerName,
+    referring_practice_name: referrerName.nullable().optional(),
+    referring_practice_number: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9/ -]{1,30}$/)
+      .nullable()
+      .optional(),
+    referral_date: localDate.nullable().optional(),
+    valid_until: localDate.nullable().optional(),
+    appointment_type_id: id.nullable().optional(),
+    max_appointments: z.number().int().min(1).max(100).nullable().optional(),
+    channel: channel.optional(),
+  })
+  .strict();
+export const referralListQuerySchema = z
+  .object({
+    patient_id: id.optional(),
+    status: z.enum(REFERRAL_STATUSES).optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+  })
+  .strict();
+export const verifyReferralSchema = z
+  .object({
+    expected_version: version,
+    valid_until: localDate.nullable().optional(),
+    appointment_type_id: id.nullable().optional(),
+    max_appointments: z.number().int().min(1).max(100).nullable().optional(),
+  })
+  .strict();
+export const rejectReferralSchema = z
+  .object({
+    expected_version: version,
+    reason_code: z.enum([
+      "EXPIRED",
+      "INCOMPLETE",
+      "WRONG_PATIENT",
+      "NOT_APPLICABLE",
+      "OTHER",
+    ]),
+  })
+  .strict();
+export const versionedSchema = z.object({ expected_version: version }).strict();
+export const REFERRAL_DOCUMENT_MEDIA_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "text/plain",
+] as const;
+export const referralDocumentSchema = z
+  .object({
+    document_type: z.enum(["REFERRAL_LETTER", "SUPPORTING_DOCUMENT"]),
+    media_type: z.enum(REFERRAL_DOCUMENT_MEDIA_TYPES),
+    /** Standard base64 of at most 10 MiB. */
+    content_base64: z.string().min(4).max(14_000_000),
+  })
+  .strict();
+
+// --- Waitlist -------------------------------------------------------------
+
+export const WAITLIST_STATUSES = [
+  "ACTIVE",
+  "OFFERED",
+  "BOOKED",
+  "CANCELLED",
+  "EXPIRED",
+] as const;
+const minuteOfDay = z.number().int().min(0).max(1440);
+export const waitlistEntrySchema = z
+  .object({
+    patient_id: id,
+    appointment_type_id: id,
+    practitioner_id: id.nullable().optional(),
+    location_id: id.nullable().optional(),
+    earliest_date: localDate,
+    latest_date: localDate,
+    preferred_weekdays: z
+      .array(z.number().int().min(1).max(7))
+      .max(7)
+      .optional(),
+    preferred_start_minute: minuteOfDay.max(1439).nullable().optional(),
+    preferred_end_minute: minuteOfDay.min(1).nullable().optional(),
+    priority: z.union([z.literal(0), z.literal(1)]).optional(),
+    referral_id: id.nullable().optional(),
+    channel: channel.optional(),
+  })
+  .strict()
+  .refine(
+    (v) =>
+      v.preferred_start_minute == null ||
+      v.preferred_end_minute == null ||
+      v.preferred_end_minute > v.preferred_start_minute,
+    { message: "preferred_end_minute must be after preferred_start_minute" },
+  );
+export const waitlistListQuerySchema = z
+  .object({
+    status: z.enum(WAITLIST_STATUSES).optional(),
+    appointment_type_id: id.optional(),
+    patient_id: id.optional(),
+    limit: z.coerce.number().int().min(1).max(500).default(100),
+  })
+  .strict();
+export const waitlistOfferAnswerSchema = z
+  .object({ channel: channel.optional() })
+  .strict();
+export const announceSlotSchema = z
+  .object({ practitioner_id: id, location_id: id, start: instantSchema })
+  .strict();
