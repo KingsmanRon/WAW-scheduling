@@ -129,8 +129,21 @@ describe.runIf(databaseEnabled)("outbox routing and housekeeping", () => {
       );
     await insert("HOLD_RELEASED", "1 hour");
     await insert("HOLD_EXPIRED", "0 seconds");
-    const platform = testPlatform(p.tenantId);
+    // The order handlers actually ran in (database clocks of separate
+    // transactions are not monotonic enough to show it).
+    const handled: string[] = [];
+    const record = async (_c: unknown, e: { event_type: string }) => {
+      handled.push(e.event_type);
+    };
+    const platform = testPlatform(p.tenantId, {
+      routes: (plan) =>
+        extendRoutes(platformRoutes(plan), {
+          HOLD_RELEASED: [record],
+          HOLD_EXPIRED: [record],
+        }),
+    });
     expect(await platform.outbox.run(p.tenantId)).toBe(0);
+    expect(handled).toEqual([]);
     expect((await outbox(p)).map((e) => e.status)).toEqual([
       "PENDING",
       "PENDING",
@@ -140,9 +153,11 @@ describe.runIf(databaseEnabled)("outbox routing and housekeeping", () => {
       [p.tenantId],
     );
     expect(await platform.outbox.run(p.tenantId)).toBe(2);
-    const [first, second] = await outbox(p);
-    expect(first!.status).toBe("PROCESSED");
-    expect(+first!.processed_at!).toBeLessThanOrEqual(+second!.processed_at!);
+    expect(handled).toEqual(["HOLD_RELEASED", "HOLD_EXPIRED"]);
+    expect((await outbox(p)).map((e) => e.status)).toEqual([
+      "PROCESSED",
+      "PROCESSED",
+    ]);
   });
 
   it("records lapsed holds as expired through the Scheduling Core", async () => {
