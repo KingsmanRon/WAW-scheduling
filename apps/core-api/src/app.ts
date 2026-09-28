@@ -66,6 +66,11 @@ export interface AppDeps {
   whatsapp?: { appSecret: string; verifyToken: string } | null;
   /** Referral document storage; absent: uploads and downloads are off. */
   documents?: ReferralDocumentDeps | null;
+  /**
+   * Whether the database has this build's newest migration (schemaGate);
+   * until it has, /ready answers 503 so the release does not go live.
+   */
+  schemaCurrent?: (() => Promise<boolean>) | undefined;
 }
 declare module "fastify" {
   interface FastifyRequest {
@@ -253,11 +258,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get("/ready", async (_q, r) => {
     try {
       await deps.pool.query("SELECT 1");
-      return { status: "ready" };
     } catch {
       r.code(503);
       return { status: "not_ready" };
     }
+    if (deps.schemaCurrent && !(await deps.schemaCurrent())) {
+      log("warn", "schema_behind", {});
+      r.code(503);
+      return { status: "not_ready", reason: "schema_behind" };
+    }
+    return { status: "ready" };
   });
   app.get("/metrics", async (req, reply) => {
     if (deps.metricsToken) {

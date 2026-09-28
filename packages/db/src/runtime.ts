@@ -26,9 +26,11 @@ export interface PoolOptions {
   caCert?: string | undefined;
   max?: number | undefined;
   applicationName?: string | undefined;
+  /** Told when an idle connection is lost (the pool replaces it). */
+  onIdleError?: ((error: Error) => void) | undefined;
 }
 export function createPool(options: PoolOptions): pg.Pool {
-  return new pg.Pool({
+  const pool = new pg.Pool({
     connectionString: options.connectionString,
     max: options.max ?? 10,
     application_name: options.applicationName ?? "access",
@@ -44,6 +46,12 @@ export function createPool(options: PoolOptions): pg.Pool {
           }
         : undefined,
   });
+  // A database restart, a pooler's idle timeout or a network blip ends idle
+  // connections; pg reports that on the pool and, unhandled, it would end
+  // the process. The pool discards the connection and opens a new one on
+  // the next query.
+  pool.on("error", (error) => options.onIdleError?.(error));
+  return pool;
 }
 export type DbClient = pg.PoolClient;
 

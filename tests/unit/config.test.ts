@@ -46,6 +46,15 @@ describe("API startup configuration", () => {
     expect(config.secure).toBe(true);
     expect(config.extraction.fixturesAllowed).toBe(false);
   });
+  it("reports the build: BUILD_ID, else Railway's commit, else its deployment", () => {
+    const build = (env: Record<string, string>) =>
+      loadApiConfig({ ...pilotApi, ...env }).buildId;
+    expect(build({ BUILD_ID: "b1", RAILWAY_GIT_COMMIT_SHA: "c1" })).toBe("b1");
+    // An unresolved ${{RAILWAY_GIT_COMMIT_SHA}} reference is empty.
+    expect(build({ BUILD_ID: "", RAILWAY_GIT_COMMIT_SHA: "c1" })).toBe("c1");
+    expect(build({ RAILWAY_DEPLOYMENT_ID: "d1" })).toBe("d1");
+    expect(build({})).toBe("dev");
+  });
   it("refuses the synthetic tenant bridge in client-pilot and production", () => {
     expect(
       problems(() =>

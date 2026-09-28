@@ -1,6 +1,11 @@
 import { ConfigError, loadApiConfig, type ApiConfig } from "@access/config";
-import { createPool, verifyRuntimeIdentity } from "@access/db";
-import { configureLogging, log } from "@access/observability";
+import {
+  createPool,
+  latestMigrationVersion,
+  schemaGate,
+  verifyRuntimeIdentity,
+} from "@access/db";
+import { configureLogging, errorFields, log } from "@access/observability";
 import { IdentifierHasher } from "@access/patients";
 import { buildApp } from "./app.js";
 import { downloadLinkKey } from "./referral-routes.js";
@@ -39,6 +44,7 @@ const pool = createPool({
   caCertPath: config.databaseCaCertPath,
   caCert: config.databaseCaCert,
   applicationName: "access-api",
+  onIdleError: (e) => log("warn", "database_connection_lost", errorFields(e)),
 });
 if (config.profile !== "local")
   await verifyRuntimeIdentity(pool, "access_request");
@@ -104,6 +110,7 @@ const app = await buildApp({
     dataMode: config.dataMode,
     buildId: config.buildId,
   },
+  schemaCurrent: schemaGate(pool, await latestMigrationVersion()),
 });
 // "::" accepts IPv4 and IPv6 (Railway's private network is IPv6); hosts
 // without IPv6 fall back to IPv4 only.

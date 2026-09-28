@@ -3,7 +3,12 @@ import {
   loadWorkerConfig,
   type WorkerConfig,
 } from "@access/config";
-import { createPool, verifyRuntimeIdentity } from "@access/db";
+import {
+  createPool,
+  latestMigrationVersion,
+  schemaGate,
+  verifyRuntimeIdentity,
+} from "@access/db";
 import {
   Metrics,
   configureLogging,
@@ -45,6 +50,7 @@ const pool = createPool({
   caCertPath: config.databaseCaCertPath,
   caCert: config.databaseCaCert,
   applicationName: "access-worker",
+  onIdleError: (e) => log("warn", "database_connection_lost", errorFields(e)),
 });
 if (config.profile !== "local")
   await verifyRuntimeIdentity(pool, "access_worker");
@@ -75,6 +81,9 @@ const metrics = new Metrics();
 describeWorkerMetrics(metrics);
 const platform = createPlatformWorker(pool, config, metrics);
 
+// Work starts only once the database has this build's newest migration.
+const schemaVersion = await latestMigrationVersion();
+const schemaCurrent = schemaGate(pool, schemaVersion);
 let lastCycle = Date.now();
 // A cycle can legitimately take a while (provider timeouts); a loop that has
 // not completed one in five minutes is stuck.
@@ -87,7 +96,7 @@ const server = await startHealthServer({
   live: () => Date.now() - lastCycle < stalledAfterMs,
   ready: async () => {
     await pool.query("SELECT 1");
-    return true;
+    return schemaCurrent();
   },
 });
 log("info", "worker_started", {
@@ -108,8 +117,20 @@ process.on("SIGTERM", () => stop("SIGTERM"));
 process.on("SIGINT", () => stop("SIGINT"));
 
 let lastSweep = 0;
+let waitingForSchema = false;
 while (!stopping) {
   try {
+    if (!(await schemaCurrent())) {
+      if (!waitingForSchema)
+        log("warn", "worker_waiting_for_schema", {
+          schema_version: schemaVersion,
+        });
+      waitingForSchema = true;
+      lastCycle = Date.now();
+      await new Promise((r) => setTimeout(r, 5000));
+      continue;
+    }
+    waitingForSchema = false;
     const referralWork = await referrals.tick();
     await referrals.reconcile();
     await referrals.pollOutcomes();

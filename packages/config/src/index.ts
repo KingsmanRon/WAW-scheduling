@@ -271,6 +271,19 @@ function positiveInt(
   return n;
 }
 
+/**
+ * What /health reports as the build: BUILD_ID when set, else the commit
+ * Railway deployed from GitHub, else Railway's deployment id (CLI deploys).
+ */
+function buildId(env: Env): string {
+  return (
+    env.BUILD_ID ||
+    env.RAILWAY_GIT_COMMIT_SHA ||
+    env.RAILWAY_DEPLOYMENT_ID ||
+    "dev"
+  );
+}
+
 export function loadApiConfig(env: Env = process.env): ApiConfig {
   const problems: string[] = [];
   const c = common(env, problems);
@@ -367,7 +380,7 @@ export function loadApiConfig(env: Env = process.env): ApiConfig {
     storage,
     scanner,
     extraction: { fixturesAllowed: c.dataMode === "SYNTHETIC" && !c.secure },
-    buildId: env.BUILD_ID ?? "dev",
+    buildId: buildId(env),
     identifierHash: identifierHashKey(env, c, problems),
     metricsToken: env.METRICS_TOKEN || undefined,
     integrations: {
@@ -647,7 +660,7 @@ export function loadWorkerConfig(env: Env = process.env): WorkerConfig {
     ),
     tenantIds: tenantIds?.length ? tenantIds : undefined,
     port: positiveInt(env, "PORT", 8081, 65535, problems),
-    buildId: env.BUILD_ID ?? "dev",
+    buildId: buildId(env),
     metricsToken: env.METRICS_TOKEN || undefined,
     whatsapp: {
       graphBaseUrl: (

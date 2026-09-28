@@ -66,6 +66,7 @@ export const LOG_FIELD_ALLOWLIST = new Set([
   "failure_kind",
   "job",
   "skip_reason",
+  "schema_version",
 ]);
 /** Never logged, at any depth, even if someone adds them to the allowlist. */
 export const SENSITIVE_FIELDS = new Set([

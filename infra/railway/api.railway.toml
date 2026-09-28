@@ -5,7 +5,7 @@
 # variables, never from the repository:
 #   ACCESS_DEPLOYMENT_PROFILE=production (or client-pilot / synthetic-staging)
 #   ACCESS_DATA_MODE=REAL (SYNTHETIC for staging), NODE_ENV=production
-#   BUILD_ID=${{RAILWAY_GIT_COMMIT_SHA}}
+#   BUILD_ID (optional; defaults to Railway's commit or deployment id)
 #   API_DATABASE_URL        access_request login via the Supabase pooler
 #   DATABASE_SSL=require, DATABASE_CA_CERT
 #   ACCESS_AUTH_MODE=jwt, AUTH_JWT_ISSUER, AUTH_JWT_AUDIENCE, AUTH_JWKS_URL

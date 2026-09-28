@@ -187,3 +187,38 @@ export async function migrate(
     client.release();
   }
 }
+
+/** The newest migration in a migrations directory (what a build ships with). */
+export async function latestMigrationVersion(
+  directory: string = DEFAULT_MIGRATIONS_DIRECTORY,
+): Promise<string> {
+  const files = await discoverMigrations(directory);
+  const latest = files.at(-1);
+  if (!latest) throw new MigrationError(`no migrations in ${directory}`);
+  return latest.version;
+}
+
+/**
+ * Whether the database has applied `version`, the newest migration the
+ * running build ships with. The API and the worker report not ready, and
+ * the worker does no work, until it has: a release deployed before its
+ * migration job (or after a failed one) never runs on an older schema. Once
+ * seen it is remembered; an unreadable ledger counts as behind.
+ */
+export function schemaGate(
+  db: pg.Pool,
+  version: string,
+): () => Promise<boolean> {
+  let current = false;
+  return async () => {
+    if (current) return true;
+    const found = await db
+      .query("SELECT 1 FROM public.schema_migrations WHERE version = $1", [
+        version,
+      ])
+      .then((r) => r.rowCount === 1)
+      .catch(() => false);
+    current = found;
+    return found;
+  };
+}

@@ -886,14 +886,15 @@ describe.runIf(databaseEnabled)("ACCESS v1.1 acceptance suite", () => {
     expect(matrix["access_request.outbox"]).toBe("S,I");
     expect(matrix["access_request.evidence_events"]).toBe("S,I");
     expect(matrix["access_request.commands"]).toBe("S,I");
-    expect(matrix["access_request.schema_migrations"]).toBe("");
+    // Read-only, for the schema gate (a release waits for its migration).
+    expect(matrix["access_request.schema_migrations"]).toBe("S");
+    expect(matrix["access_worker.schema_migrations"]).toBe("S");
     for (const table of [
       "artifacts",
       "commands",
       "access_interactions",
       "organisation_memberships",
       "access_audit_log",
-      "schema_migrations",
     ])
       expect(matrix[`access_worker.${table}`]).toBe("");
     expect(matrix["access_worker.access_rule_sets"]).toBe("S");

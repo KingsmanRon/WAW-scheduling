@@ -120,6 +120,8 @@ export async function testApi(
     allowPrivateTargets?: boolean;
     /** Enable the WhatsApp webhook with these Meta app credentials. */
     whatsapp?: { appSecret: string; verifyToken: string };
+    /** Readiness waits for this (see schemaGate). */
+    schemaCurrent?: () => Promise<boolean>;
   } = {},
 ): Promise<TestApi> {
   const artifactRoot = await mkdtemp(join(tmpdir(), "access-artifacts-"));
@@ -161,6 +163,7 @@ export async function testApi(
       linkKey: downloadLinkKey(Buffer.alloc(32, 9)),
       retentionDays: 30,
     },
+    schemaCurrent: options.schemaCurrent,
   });
   return { app, service, artifactRoot, store, close: () => app.close() };
 }
