@@ -41,7 +41,7 @@ jobs:
           QUALIFICATION_REPORT: qualification-report.json
         run: npx vitest run --project integration --reporter=verbose --reporter=json --outputFile.json=integration-report.json
       - name: Assert integration suites ran without skips
-        run: node scripts/assert-test-report.mjs integration-report.json 172
+        run: node scripts/assert-test-report.mjs integration-report.json 173
       - name: Build
         run: npm run build
       - name: Install Bicep

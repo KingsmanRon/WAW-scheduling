@@ -1197,6 +1197,8 @@ export async function registerPracticeRoutes(
     );
   });
 
+  // ORDER BY a.id, not id: the output column "id" is text, and an unqualified
+  // name in ORDER BY sorts by the output column ("9" after "10").
   app.get(`${base}/audit-events`, async (req) => {
     const auth = await authorize(req, "audit.read");
     const q = auditQuerySchema.parse(req.query);
@@ -1204,11 +1206,11 @@ export async function registerPracticeRoutes(
       c.query(
         `SELECT id::text,occurred_at,actor_type,actor_id,actor_role,action,resource_type,resource_id,channel,changes,reason,
                 request_id,correlation_id
-           FROM platform.audit_events
+           FROM platform.audit_events a
           WHERE tenant_id=$1 AND practice_id=$2
             AND ($3::text IS NULL OR resource_type=$3) AND ($4::text IS NULL OR resource_id=$4)
-            AND ($5::bigint IS NULL OR id < $5)
-          ORDER BY id DESC LIMIT $6`,
+            AND ($5::bigint IS NULL OR a.id < $5)
+          ORDER BY a.id DESC LIMIT $6`,
         [
           ctx.tenantId,
           ctx.practiceId,

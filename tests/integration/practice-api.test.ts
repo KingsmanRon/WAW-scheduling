@@ -276,6 +276,88 @@ describe.runIf(databaseEnabled)("practice scheduling API (JWT)", () => {
     expect(again.json().error).toBe("INVALID_TRANSITION");
   });
 
+  it("lists history and the audit trail in id order across digit boundaries, and pages without gaps", async () => {
+    // The next ids of both tables become ...98, ...99, 10...00: sorted as
+    // text (the SELECTs return ids as text) they would come out of order.
+    const nearBoundary = async (table: string) => {
+      const owner = ownerPool();
+      const seq = (
+        await owner.query<{ s: string }>(
+          "SELECT pg_get_serial_sequence($1,'id') AS s",
+          [table],
+        )
+      ).rows[0]!.s;
+      const last = Number(
+        (
+          await owner.query<{ v: string }>(
+            `SELECT last_value::text AS v FROM ${seq}`,
+          )
+        ).rows[0]!.v,
+      );
+      await owner.query("SELECT setval($1::regclass, $2)", [
+        seq,
+        10 ** String(last + 3).length - 2,
+      ]);
+    };
+    await nearBoundary("scheduling.appointment_events");
+    await nearBoundary("platform.audit_events");
+    const booked = await call(
+      "POST",
+      path(p, "/appointments"),
+      "RECEPTIONIST",
+      booking(slot(8, "10:00")),
+    );
+    expect(booked.statusCode).toBe(201);
+    const id = booked.json().appointment.id;
+    expect(
+      (
+        await call(
+          "POST",
+          path(p, `/appointments/${id}/cancel`),
+          "RECEPTIONIST",
+          { reason_code: "PATIENT_REQUEST" },
+        )
+      ).statusCode,
+    ).toBe(200);
+    const history = await call(
+      "GET",
+      path(p, `/appointments/${id}/history`),
+      "READ_ONLY",
+    );
+    expect(
+      history.json().items.map((e: { event_type: string }) => e.event_type),
+    ).toEqual(["CONFIRMED", "CANCELLED"]);
+    const trail = await call(
+      "GET",
+      path(p, `/audit-events?resource_type=appointment&resource_id=${id}`),
+      "PRACTICE_ADMIN",
+    );
+    expect(trail.json().items.map((e: { action: string }) => e.action)).toEqual(
+      ["appointment.cancelled", "appointment.created"],
+    );
+    // Page one entry at a time: newest first, each page strictly older.
+    const seen: number[] = [];
+    let before: string | null = null;
+    for (let page = 0; page < 4; page++) {
+      const res = await call(
+        "GET",
+        path(p, `/audit-events?limit=1${before ? `&before_id=${before}` : ""}`),
+        "PRACTICE_ADMIN",
+      );
+      const body = res.json() as {
+        items: { id: string }[];
+        next_before_id: string | null;
+      };
+      seen.push(Number(body.items[0]!.id));
+      before = body.next_before_id;
+    }
+    const newest = await ownerPool().query<{ id: string }>(
+      "SELECT id FROM platform.audit_events WHERE tenant_id=$1 AND practice_id=$2 ORDER BY id DESC LIMIT 4",
+      [p.tenantId, p.practiceId],
+    );
+    expect(seen).toEqual(newest.rows.map((r) => Number(r.id)));
+  });
+
   it("enforces role permissions on every operation", async () => {
     const readOnlyBook = await call(
       "POST",

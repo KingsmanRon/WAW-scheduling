@@ -317,9 +317,10 @@ export async function appointmentHistory(
   s: Scope,
   appointmentId: string,
 ): Promise<AppointmentEventView[]> {
+  // e.id: the unqualified name would sort the text output column.
   const rows = await c.query(
     `SELECT id::text,event_type,from_status,to_status,actor_type,actor_id,actor_role,channel,reason_code,details,occurred_at
-       FROM scheduling.appointment_events WHERE tenant_id=$1 AND practice_id=$2 AND appointment_id=$3 ORDER BY id`,
+       FROM scheduling.appointment_events e WHERE tenant_id=$1 AND practice_id=$2 AND appointment_id=$3 ORDER BY e.id`,
     [s.tenantId, s.practiceId, appointmentId],
   );
   return rows.rows.map((r) => ({
