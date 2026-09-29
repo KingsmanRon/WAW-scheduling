@@ -1,0 +1,88 @@
+# Alert rules for ACCESS (Prometheus rule format). What each alert means and
+# what to do about it: RUNBOOK.md, "Alerts".
+groups:
+  - name: access-availability
+    rules:
+      - alert: AccessTargetDown
+        expr: up{job=~"access-api|access-worker"} == 0
+        for: 3m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.job }} is not answering /metrics"
+      - alert: AccessApiServerErrors
+        expr: |
+          sum(rate(http_server_errors_total[5m]))
+            / clamp_min(sum(rate(http_requests_total[5m])), 1) > 0.02
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "More than 2% of API requests fail with a server error"
+      - alert: AccessApiSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[10m]))) > 1.5
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "API p95 latency above 1.5 s"
+      - alert: AccessDatabaseErrors
+        expr: increase(database_errors_total[10m]) > 5
+        labels: { severity: page }
+        annotations:
+          summary: "Unexpected database errors (code {{ $labels.code }})"
+  - name: access-scheduling
+    rules:
+      - alert: AccessSchedulingServerErrors
+        # Refusals (SLOT_UNAVAILABLE, INVALID_TRANSITION...) are answers, not
+        # errors; these are requests the practice API could not complete.
+        expr: |
+          sum(increase(http_server_errors_total{route=~"/v1/practices/.*"}[10m])) > 3
+        labels: { severity: page }
+        annotations:
+          summary: "Practice API requests are failing with server errors"
+      - alert: AccessSlotConflictSpike
+        expr: sum(increase(slot_conflicts_total[15m])) > 50
+        labels: { severity: ticket }
+        annotations:
+          summary: "Many SLOT_UNAVAILABLE refusals: stale availability shown somewhere, or contention"
+  - name: access-worker
+    rules:
+      - alert: AccessOutboxBacklog
+        expr: max(outbox_oldest_pending_seconds) > 300
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Outbox events are waiting more than 5 minutes (notifications, waitlist offers, webhooks delayed)"
+      - alert: AccessOutboxFailed
+        expr: max(outbox_failed) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "{{ $value }} outbox events FAILED after all attempts"
+      - alert: AccessNotificationsBacklog
+        expr: max(notifications_pending) > 200
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Due notifications are not being sent"
+      - alert: AccessNotificationFailures
+        expr: sum(increase(notifications_failed_total[1h])) > 10
+        labels: { severity: ticket }
+        annotations:
+          summary: "Notifications failing permanently (check provider status, templates, tokens)"
+      - alert: AccessWorkerJobErrors
+        expr: sum by (job) (increase(worker_job_errors_total[15m])) > 5
+        labels: { severity: ticket }
+        annotations:
+          summary: "Worker job {{ $labels.job }} is failing repeatedly"
+  - name: access-channels
+    rules:
+      - alert: AccessWebhookSignatureRejections
+        expr: sum(increase(whatsapp_webhook_rejected_total{reason="signature"}[15m])) > 20
+        labels: { severity: ticket }
+        annotations:
+          summary: "WhatsApp webhook calls with bad signatures: wrong WHATSAPP_APP_SECRET, or someone probing the endpoint"
+      - alert: AccessClassifierFailing
+        expr: |
+          sum(increase(intent_classifier_requests_total{outcome=~"error|timeout|provider_error"}[30m])) > 20
+        labels: { severity: ticket }
+        annotations:
+          summary: "The optional intent classifier is failing (the channel falls back to its menus)"

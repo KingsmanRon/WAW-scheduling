@@ -1,0 +1,47 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/domain"
+    },
+    {
+      "path": "packages/observability"
+    },
+    {
+      "path": "packages/policy"
+    },
+    {
+      "path": "packages/rules"
+    },
+    {
+      "path": "packages/config"
+    },
+    {
+      "path": "packages/db"
+    },
+    {
+      "path": "packages/scheduling"
+    },
+    {
+      "path": "packages/patients"
+    },
+    {
+      "path": "packages/notifications"
+    },
+    {
+      "path": "packages/access"
+    },
+    {
+      "path": "packages/integrations"
+    },
+    {
+      "path": "apps/core-api"
+    },
+    {
+      "path": "apps/worker"
+    }
+  ]
+}

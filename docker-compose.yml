@@ -1,0 +1,69 @@
+# Local development only: synthetic data, synthetic tenant bridge, local
+# encrypted artifact store and mock scanner/connector. Never real data.
+x-local: &local
+  ACCESS_DEPLOYMENT_PROFILE: local
+  ACCESS_DATA_MODE: SYNTHETIC
+services:
+  postgres:
+    image: postgres:16.4
+    environment:
+      POSTGRES_DB: access
+      POSTGRES_USER: access_owner
+      POSTGRES_PASSWORD: access_owner
+    ports: ["5432:5432"]
+    healthcheck:
+      {
+        test: ["CMD-SHELL", "pg_isready -U access_owner -d access"],
+        interval: 2s,
+        timeout: 2s,
+        retries: 20,
+      }
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+  migrate:
+    build: .
+    command: ["node", "packages/db/dist/migrate.js"]
+    environment:
+      <<: *local
+      MIGRATION_DATABASE_URL: "postgres://access_owner:access_owner@postgres:5432/access"
+    depends_on: { postgres: { condition: service_healthy } }
+  seed:
+    build: .
+    command: ["node", "packages/db/dist/seed.js"]
+    environment:
+      <<: *local
+      MIGRATION_DATABASE_URL: "postgres://access_owner:access_owner@postgres:5432/access"
+    depends_on: { migrate: { condition: service_completed_successfully } }
+  provision:
+    image: postgres:16.4
+    command:
+      [
+        "bash",
+        "-c",
+        'psql "$$MIGRATION_DATABASE_URL" -c "ALTER ROLE access_request LOGIN PASSWORD ''local-api''; ALTER ROLE access_worker LOGIN PASSWORD ''local-worker''"',
+      ]
+    environment:
+      MIGRATION_DATABASE_URL: "postgres://access_owner:access_owner@postgres:5432/access"
+    depends_on: { seed: { condition: service_completed_successfully } }
+  api:
+    build: .
+    ports: ["3001:3001"]
+    environment:
+      <<: *local
+      API_DATABASE_URL: postgres://access_request:local-api@postgres:5432/access
+      ARTIFACT_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      IDENTIFIER_HASH_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
+      ARTIFACT_ROOT: /tmp/artifacts
+      ACCESS_AUTH_MODE: synthetic
+      CONSOLE_ORIGIN: http://localhost:3000
+    depends_on: { provision: { condition: service_completed_successfully } }
+  worker:
+    build: .
+    command: ["node", "apps/worker/dist/main.js"]
+    environment:
+      <<: *local
+      WORKER_DATABASE_URL: "postgres://access_worker:local-worker@postgres:5432/access"
+      IDENTIFIER_HASH_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
+      CONNECTOR_KIND: mock
+      MOCK_APPOINTMENT_OUTCOME: NONE
+    depends_on: { provision: { condition: service_completed_successfully } }
+volumes: { pgdata: {} }

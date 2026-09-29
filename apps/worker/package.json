@@ -1,0 +1,29 @@
+{
+  "name": "@access/worker",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -b",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@access/access": "*",
+    "@access/config": "*",
+    "@access/contracts": "*",
+    "@access/db": "*",
+    "@access/domain": "*",
+    "@access/integrations": "*",
+    "@access/notifications": "*",
+    "@access/observability": "*",
+    "@access/patients": "*",
+    "@access/policy": "*",
+    "@access/rules": "*",
+    "@access/scheduling": "*",
+    "luxon": "^3.7.2",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.7.5"
+  }
+}

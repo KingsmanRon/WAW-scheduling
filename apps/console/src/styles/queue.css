@@ -1,0 +1,396 @@
+/* Queue: operational. No scroll-linked motion; hover and focus only. */
+.queue {
+  --queue-bar-h: 60px;
+}
+
+/* Lens bar (sticky) -------------------------------------------------------- */
+.queue-bar {
+  position: sticky;
+  top: var(--sticky-top, 0px);
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3) var(--s-5);
+  margin: 0 calc(var(--gutter) * -1) var(--s-4);
+  padding: var(--s-3) var(--gutter);
+  background: var(--c-canvas);
+  box-shadow: 0 1px 0 var(--c-line);
+}
+.lenses {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Room for focus rings inside the scroll area. */
+  padding: 3px;
+  margin: -3px;
+}
+.lenses::-webkit-scrollbar {
+  display: none;
+}
+.lenses[data-fade="right"] {
+  mask-image: linear-gradient(to right, black calc(100% - 3rem), transparent);
+}
+.lenses[data-fade="left"] {
+  mask-image: linear-gradient(to left, black calc(100% - 3rem), transparent);
+}
+.lenses[data-fade="both"] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 3rem,
+    black calc(100% - 3rem),
+    transparent
+  );
+}
+.lens {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 34px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--c-line-2);
+  border-radius: var(--r-2);
+  background: var(--c-surface);
+  color: var(--c-ink-2);
+  font-size: var(--t-sm);
+  font-weight: 560;
+  white-space: nowrap;
+  transition:
+    background-color var(--d-1) var(--ease-out),
+    border-color var(--d-1) var(--ease-out),
+    color var(--d-1) var(--ease-out);
+}
+.lens:hover {
+  border-color: var(--c-ink-3);
+  color: var(--c-ink);
+}
+.lens[aria-pressed="true"] {
+  background: var(--c-brand);
+  border-color: var(--c-brand);
+  color: var(--c-on-brand);
+}
+.lens--attention {
+  min-height: 38px;
+  padding: 0 var(--s-4) 0 var(--s-3);
+  color: var(--c-ink);
+  font-size: var(--t-base);
+  font-weight: 650;
+  box-shadow: var(--e1);
+}
+.lens--attention::before {
+  content: "";
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-accent-wash);
+}
+.lens--attention[aria-pressed="true"] {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+}
+.lens--attention[aria-pressed="true"]::before {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-accent) 40%, transparent);
+}
+.lens--exception[aria-pressed="true"] {
+  background: var(--c-exception-fg);
+  border-color: var(--c-exception-fg);
+}
+/* The stage lenses sit on a line, in the order a referral travels. */
+.lens-line {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lens-line::before {
+  content: "";
+  position: absolute;
+  left: var(--s-3);
+  right: var(--s-3);
+  top: 50%;
+  height: 1px;
+  background: var(--c-line-2);
+}
+.lens-line li {
+  position: relative;
+  padding: 0 3px;
+}
+.queue-status {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  color: var(--c-ink-3);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.queue-refresh {
+  min-height: 34px;
+  padding: 0 var(--s-3);
+  font-size: var(--t-sm);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .queue-refresh[data-busy] .icon {
+    animation: spin 0.9s linear infinite;
+  }
+}
+
+/* Table ---------------------------------------------------------------------- */
+.queue-table {
+  overflow: clip;
+}
+.queue-table table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+.queue-table th {
+  position: sticky;
+  top: calc(var(--sticky-top, 0px) + var(--queue-bar-h));
+  z-index: 1;
+  padding: var(--s-3) var(--s-4);
+  background: var(--c-surface-2);
+  border-bottom: 1px solid var(--c-line);
+  color: var(--c-ink-3);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: left;
+  vertical-align: bottom;
+}
+.queue-table th:nth-child(1) {
+  width: 13%;
+}
+.queue-table th:nth-child(2) {
+  width: 17%;
+}
+.queue-table th:nth-child(3) {
+  width: 9%;
+}
+.queue-table th:nth-child(4) {
+  width: 12%;
+}
+.queue-table th:nth-child(5) {
+  width: 23%;
+}
+.queue-table th:nth-child(6) {
+  width: 14%;
+}
+.queue-table th:nth-child(7) {
+  width: 12%;
+}
+.queue-table td {
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--c-line);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.queue-table tbody tr:first-child td {
+  border-top: 0;
+}
+.queue-table tbody {
+  transition: opacity var(--d-2) var(--ease-out);
+}
+.queue-table.is-refreshing tbody {
+  opacity: 0.62;
+}
+.row {
+  cursor: pointer;
+  transition: background-color var(--d-1) var(--ease-out);
+}
+.row:hover {
+  background: var(--c-surface-2);
+}
+.row:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: -2px;
+  background: var(--c-brand-wash);
+}
+.c-case .ref {
+  display: block;
+  white-space: nowrap;
+  font-size: var(--t-sm);
+  font-weight: 620;
+  letter-spacing: 0.01em;
+}
+.c-case .work,
+.c-position .reason {
+  display: block;
+  margin-top: var(--s-1);
+  color: var(--c-ink-3);
+  font-size: var(--t-xs);
+}
+.c-position .reason {
+  color: var(--c-exception-fg);
+  font-weight: 560;
+}
+.position {
+  display: grid;
+  justify-items: start;
+  gap: var(--s-2);
+  padding-top: 3px;
+}
+.c-age {
+  color: var(--c-ink-2);
+}
+.flag {
+  display: inline-block;
+  margin-top: var(--s-1);
+  padding: 1px 6px;
+  border-radius: var(--r-1);
+  background: var(--c-attention-bg);
+  color: var(--c-attention-fg);
+  font-size: var(--t-2xs);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.c-owner,
+.c-outcome {
+  color: var(--c-ink-2);
+}
+.c-action {
+  color: var(--c-ink);
+  font-weight: 560;
+}
+.row--booked .c-action,
+.row--closed .c-action,
+.row--rejected .c-action {
+  color: var(--c-ink-3);
+  font-weight: 450;
+}
+.c-destination {
+  color: var(--c-ink-2);
+}
+.c-destination.attention {
+  color: var(--c-attention-fg);
+  font-weight: 600;
+}
+.c-destination.exception {
+  color: var(--c-exception-fg);
+  font-weight: 600;
+}
+
+/* 13" laptops: tighter lenses and cells so the whole line fits ---------------- */
+@media (max-width: 1439px) {
+  .lenses {
+    gap: var(--s-2);
+  }
+  .lens {
+    padding: 0 9px;
+    font-size: 0.78125rem;
+  }
+  .lens--attention {
+    padding: 0 var(--s-3) 0 10px;
+    font-size: var(--t-sm);
+  }
+  .lens-line li {
+    padding: 0 2px;
+  }
+  .queue-table th,
+  .queue-table td {
+    padding-left: var(--s-3);
+    padding-right: var(--s-3);
+  }
+}
+
+/* Tablets and phones: each row becomes a compact stacked entry ------------------ */
+@media (max-width: 1099px) {
+  .queue-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .queue-table table,
+  .queue-table tbody {
+    display: block;
+  }
+  .queue-table tr.row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas:
+      "case case age"
+      "position position position"
+      "action action action"
+      "owner destination outcome";
+    gap: var(--s-2) var(--s-3);
+    padding: var(--s-4);
+    border-top: 1px solid var(--c-line);
+  }
+  .queue-table tbody tr.row:first-child {
+    border-top: 0;
+  }
+  .queue-table td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .c-case {
+    grid-area: case;
+  }
+  .c-age {
+    grid-area: age;
+    text-align: right;
+  }
+  .c-position {
+    grid-area: position;
+  }
+  .position {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    padding-top: 0;
+  }
+  .c-action {
+    grid-area: action;
+    font-size: var(--t-md);
+  }
+  .c-owner {
+    grid-area: owner;
+  }
+  .c-destination {
+    grid-area: destination;
+  }
+  .c-outcome {
+    grid-area: outcome;
+  }
+  .c-owner,
+  .c-destination,
+  .c-outcome {
+    font-size: var(--t-xs);
+  }
+  .c-owner::before,
+  .c-destination::before,
+  .c-outcome::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--c-ink-3);
+    font-size: var(--t-2xs);
+    font-weight: 600;
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+  }
+}
+
+/* Small phones: the rows matter more than the explanation. */
+@media (max-width: 599px) {
+  .queue .page-context {
+    display: none;
+  }
+  .queue .page-header {
+    margin-bottom: var(--s-4);
+  }
+}

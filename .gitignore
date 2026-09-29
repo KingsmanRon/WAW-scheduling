@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+coverage/
+.env
+data/
+*.tsbuildinfo
+scratch/
+qualification-report.json
+test-results/
+playwright-report/
+e2e-report.json
+unit-report.json
+integration-report.json

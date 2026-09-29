@@ -1,0 +1,32 @@
+# ACCESS API: the Scheduling API behind the practice console, the WhatsApp
+# webhook and the organisation referral intake. Stateless: scale by replicas.
+#
+# Variables (full list and meaning: DEPLOYMENT.md). Secrets come from Railway
+# variables, never from the repository:
+#   ACCESS_DEPLOYMENT_PROFILE=production (or client-pilot / synthetic-staging)
+#   ACCESS_DATA_MODE=REAL (SYNTHETIC for staging), NODE_ENV=production
+#   BUILD_ID (optional; defaults to Railway's commit or deployment id)
+#   API_DATABASE_URL        access_request login via the Supabase pooler
+#   DATABASE_SSL=require, DATABASE_CA_CERT
+#   ACCESS_AUTH_MODE=jwt, AUTH_JWT_ISSUER, AUTH_JWT_AUDIENCE, AUTH_JWKS_URL
+#   CONSOLE_ORIGIN          the console's https origin(s) on Vercel
+#   ARTIFACT_STORE=supabase, SUPABASE_URL, SUPABASE_STORAGE_BUCKET,
+#   SUPABASE_SERVICE_ROLE_KEY (this service only; never the console)
+#   ARTIFACT_ENCRYPTION_KEY, IDENTIFIER_HASH_KEY, IDENTIFIER_HASH_KEY_ID
+#   ARTIFACT_SCANNER=clamav, CLAMAV_HOST=clamav.railway.internal, CLAMAV_PORT
+#   WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN, METRICS_TOKEN
+# Never MIGRATION_DATABASE_URL: the API refuses to start with it.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["apps/core-api/**", "packages/**", "package-lock.json", "Dockerfile"]
+
+[deploy]
+startCommand = "node apps/core-api/dist/server.js"
+healthcheckPath = "/ready"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+numReplicas = 2
+# SIGTERM drains in-flight requests (up to 25 s) before the old copy stops.
+drainingSeconds = 30

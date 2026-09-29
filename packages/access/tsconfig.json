@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src"],
+  "references": [
+    { "path": "../contracts" },
+    { "path": "../db" },
+    { "path": "../integrations" },
+    { "path": "../notifications" },
+    { "path": "../observability" },
+    { "path": "../patients" },
+    { "path": "../scheduling" }
+  ],
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  }
+}

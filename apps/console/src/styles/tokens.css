@@ -1,0 +1,182 @@
+/*
+ * ACCESS design tokens. Every colour, size, radius, shadow and duration in
+ * the console comes from here; component styles never use raw values.
+ */
+:root {
+  /* Colour roles: operational (light) surfaces */
+  --c-canvas: #eef3f1;
+  --c-canvas-sunk: #e5ece9;
+  --c-surface: #fcfdfc;
+  --c-surface-2: #f3f6f5;
+  --c-surface-3: #eaf0ee;
+  --c-ink: #14262e;
+  --c-ink-2: #465a5f;
+  --c-ink-3: #5a6e73;
+  --c-line: #d7e0dd;
+  --c-line-2: #bfccc8;
+  --c-field-border: #7f9894;
+
+  /* Brand: deep clinical green */
+  --c-brand: #174f4a;
+  --c-brand-strong: #0f3a36;
+  --c-brand-mid: #2b6b63;
+  --c-brand-wash: #e0ebe7;
+  --c-brand-wash-2: #cfe0da;
+  --c-on-brand: #ffffff;
+  --c-highlight: #ffffff;
+
+  /* The single accent: warm coral means "a person is needed here" */
+  --c-accent: #d95a38;
+  --c-accent-bright: #f0714e;
+  --c-accent-strong: #b0432a;
+  --c-accent-wash: #fce8e1;
+  --c-accent-deep: #933722;
+
+  /* Night: the operating rail and the brand stages only */
+  --c-night: #0b1b1e;
+  --c-night-2: #10252a;
+  --c-night-3: #17333a;
+  --c-night-ink: #e8f0ed;
+  --c-night-ink-2: #a9bdb8;
+  --c-night-ink-3: #7f9792;
+  --c-night-line: color-mix(in srgb, var(--c-night-ink) 12%, transparent);
+  --c-night-line-2: color-mix(in srgb, var(--c-night-ink) 22%, transparent);
+  --c-mint: #8fd9c5;
+  --c-mint-soft: color-mix(in srgb, var(--c-mint) 14%, transparent);
+  --c-booked-night: #5cc493;
+  --c-paper: #f7faf8;
+  --c-shadow-night: rgb(2 10 12 / 0.55);
+
+  /* Status: reserved meanings, always shown with text and shape */
+  --c-attention-fg: #7f5206;
+  --c-attention-bg: #faefd7;
+  --c-attention-mark: #b27a12;
+  --c-progress-fg: #1d557f;
+  --c-progress-bg: #e1ecf5;
+  --c-progress-mark: #3b7cb3;
+  --c-booked-fg: #1a5e40;
+  --c-booked-bg: #dcefe4;
+  --c-booked-mark: #2f8a5d;
+  --c-exception-fg: #9e321b;
+  --c-exception-bg: #fbe3db;
+  --c-exception-mark: #d24f2e;
+  --c-closed-fg: #4b5b60;
+  --c-closed-bg: #e6ecea;
+  --c-closed-mark: #7a8b8f;
+
+  /* Provenance: a printed word first; tint only supports it */
+  --c-prov-observed-bg: #e0ebe7;
+  --c-prov-observed-fg: #0f3a36;
+  --c-prov-derived-bg: #e3e8f2;
+  --c-prov-derived-fg: #2c466a;
+  --c-prov-estimated-bg: #f3ebdb;
+  --c-prov-estimated-fg: #6a4f1c;
+  --c-prov-unknown-a: #e9eeec;
+  --c-prov-unknown-b: #f6f8f7;
+  --c-prov-night-derived: #b8cbef;
+  --c-prov-night-estimated: #e6cd97;
+
+  /* Data: ordinal flow ramp (validated light and night), one bar hue */
+  --c-flow-1: #7db5a7;
+  --c-flow-2: #4a8d80;
+  --c-flow-3: #2b6b63;
+  --c-flow-4: #174f4a;
+  --c-flow-night-1: #2e7a6b;
+  --c-flow-night-2: #469a87;
+  --c-flow-night-3: #6cbba7;
+  --c-flow-night-4: #9fdccb;
+  --c-bar: #2b6b63;
+  --c-bar-track: #e3ebe8;
+
+  --c-focus: #174f4a;
+  --c-focus-night: #8fd9c5;
+  --c-selection: #cfe0da;
+
+  /* Type: two families. Mono is for data only (references, codes, hashes). */
+  --font-sans:
+    "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono:
+    "Geist Mono Variable", "Geist Mono", ui-monospace, "SFMono-Regular", Menlo,
+    monospace;
+
+  --t-2xs: 0.6875rem; /* 11px: caps labels */
+  --t-xs: 0.75rem; /* 12px */
+  --t-sm: 0.8125rem; /* 13px */
+  --t-base: 0.875rem; /* 14px: UI and tables */
+  --t-md: 0.9375rem; /* 15px: reading */
+  --t-lg: 1.125rem; /* 18px: section titles */
+  --t-xl: 1.375rem; /* 22px: page titles */
+  --t-2xl: 1.75rem; /* 28px: command */
+  --t-3xl: clamp(1.875rem, 1.2rem + 1.6vw, 2.5rem); /* figures */
+  --t-4xl: clamp(2.125rem, 1.1rem + 2.9vw, 3.5rem); /* login headline */
+
+  --track-display: -0.028em;
+  --track-title: -0.018em;
+  --track-body: -0.004em;
+  --track-caps: 0.07em;
+
+  --lh-tight: 1.08;
+  --lh-title: 1.2;
+  --lh-ui: 1.45;
+  --lh-body: 1.6;
+
+  /* Space: 4px base */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.25rem;
+  --s-6: 1.5rem;
+  --s-7: 2rem;
+  --s-8: 2.5rem;
+  --s-9: 3rem;
+  --s-10: 4rem;
+  --s-11: 6rem;
+  --gutter: clamp(1rem, 0.4rem + 2.4vw, 2.5rem);
+
+  /* One radius scale */
+  --r-1: 4px;
+  --r-2: 8px;
+  --r-3: 12px;
+  --r-4: 20px;
+
+  /* Elevation: offset + blur, tinted to the ink hue */
+  --shadow-hue: 192 45% 12%;
+  --e1:
+    0 1px 1px hsl(var(--shadow-hue) / 0.06),
+    0 1px 3px hsl(var(--shadow-hue) / 0.06);
+  --e2:
+    0 1px 2px hsl(var(--shadow-hue) / 0.06),
+    0 6px 16px -6px hsl(var(--shadow-hue) / 0.16);
+  --e3:
+    0 2px 4px hsl(var(--shadow-hue) / 0.08),
+    0 18px 40px -12px hsl(var(--shadow-hue) / 0.28),
+    0 40px 80px -32px hsl(var(--shadow-hue) / 0.3);
+  --edge-light: inset 0 1px 0
+    color-mix(in srgb, var(--c-highlight) 70%, transparent);
+  --edge-light-night: inset 0 1px 0
+    color-mix(in srgb, var(--c-night-ink) 8%, transparent);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --d-1: 120ms;
+  --d-2: 180ms;
+  --d-3: 240ms;
+  --d-4: 420ms;
+  --d-5: 900ms;
+
+  /* Layout */
+  --rail-w: 248px;
+  --rail-w-compact: 84px;
+  --topbar-h: 56px;
+  --tabbar-h: 64px;
+  --content-max: 1440px;
+  --measure: 68ch;
+
+  --z-sticky: 20;
+  --z-rail: 30;
+  --z-menu: 40;
+  --z-skip: 100;
+}
