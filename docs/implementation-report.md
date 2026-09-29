@@ -381,6 +381,7 @@ filter). All 18 pass. Found and fixed:
 | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Linking a WhatsApp conversation to a patient also handed it back to the assistant                                                                   | `PATCH /conversations/:id` accepts `patient_id` alone; the conversation stays with reception; audited as `conversation.patient_linked`; an empty change is refused (400)                                                                        |
 | Handing back, closing or linking straight after a staff reply was refused as a conflicting change (the worker records the send on the conversation) | The console holds those actions until the reply has left (up to 6 s); a link still refused that way is applied once to the current version if nobody has linked a patient since. Handing back and closing stay refused, for staff to look first |
+| Opening a conversation from the "With the assistant" or "Closed" tab sent the list back to "Needs reception"                                        | The tab is part of the address, so opening, resolving and going back keep it                                                                                                                                                                    |
 | "Offer a free time" defaulted to 10:00, which was usually too soon to be answered and refused                                                       | It defaults to the first time an offer can still be answered                                                                                                                                                                                    |
 | Calendar: titles and hours scrolled out of view on a long day; next and previous used mismatched, unnamed icons                                     | Scroll area with fixed titles and hour column; matching icons named "Next day" / "Previous week"                                                                                                                                                |
 | Notifications showed message codes, no due or sent times, no way to the appointment                                                                 | Names staff use, a "Queued" column with the due time, sent times, "Open appointment"                                                                                                                                                            |
@@ -417,8 +418,9 @@ the day, confirmation, visit steps), 7 browser tests (the sign-in hand-off
 with a deep link, the computed morning, choosing a time by button and by
 keyboard, the skip link, reduced motion, the page's chrome on a desktop and
 a phone), a browser test in which reception replies on WhatsApp, links
-the patient at once and closes the conversation (it fails on the previous
-console with the conflict above), and the link-only change in the WhatsApp
+the patient at once, closes the conversation and opens it again from the
+"Closed" tab (it fails on the previous console, first with the conflict
+above, then with the tab), and the link-only change in the WhatsApp
 channel suite. The CI floors rose to 151 unit and 23 browser tests.
 
 ### Verification (this commit)

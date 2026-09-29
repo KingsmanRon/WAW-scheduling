@@ -38,7 +38,11 @@ const TABS = [
 export function Conversations({ route, go }: ViewProps) {
   const practice = usePractice();
   const link = useLink();
-  const [tab, setTab] = useState<(typeof TABS)[number][0]>("NEEDS_STAFF");
+  // The tab lives in the route, so opening a conversation keeps it.
+  const tab =
+    TABS.find(([value]) => value === route.query.get("status"))?.[0] ??
+    "NEEDS_STAFF";
+  const status = (value: string) => (value === "NEEDS_STAFF" ? null : value);
   const list = useLoad(
     () =>
       practice.client.get<{ items: ConversationSummary[] }>("/conversations", {
@@ -61,7 +65,9 @@ export function Conversations({ route, go }: ViewProps) {
             type="button"
             role="tab"
             aria-selected={tab === value}
-            onClick={() => setTab(value)}
+            onClick={() =>
+              go(link("conversations", selected, { status: status(value) }))
+            }
           >
             {text}
           </button>
@@ -84,7 +90,7 @@ export function Conversations({ route, go }: ViewProps) {
             {(list.data?.items ?? []).map((c) => (
               <li key={c.id}>
                 <a
-                  href={link("conversations", c.id)}
+                  href={link("conversations", c.id, { status: status(tab) })}
                   aria-current={c.id === selected ? "true" : undefined}
                 >
                   <span className="conv-list__who">
@@ -118,7 +124,9 @@ export function Conversations({ route, go }: ViewProps) {
           {selected ? (
             <Thread
               id={selected}
-              onResolved={() => go(link("conversations"))}
+              onResolved={() =>
+                go(link("conversations", null, { status: status(tab) }))
+              }
             />
           ) : (
             <Empty title="Choose a conversation" />

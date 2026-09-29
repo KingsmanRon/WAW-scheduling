@@ -54,6 +54,15 @@ test("reception replies on WhatsApp, links the patient straight after and closes
 
   await thread.getByRole("button", { name: "Close conversation" }).click();
   await expect(page.getByText("Choose a conversation")).toBeVisible();
+  // Opening a closed conversation keeps the list on its tab.
+  const closed = page.getByRole("tab", { name: "Closed" });
+  await closed.click();
+  await page.locator(".conv-list a", { hasText: themba }).click();
+  await expect(thread.getByRole("heading", { name: themba })).toBeVisible();
+  await expect(closed).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.locator(".conv-list a", { hasText: themba }),
+  ).toHaveAttribute("aria-current", "true");
 
   const conversation = await db().query<{
     id: string;
