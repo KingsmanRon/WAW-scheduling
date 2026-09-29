@@ -202,6 +202,17 @@ bookings, the patient for WhatsApp bookings.
   `scheduling.schedule_signals` (a per-practice change counter), which
   triggers a re-read through the API. Polling every 20 s covers Realtime
   outages.
+- **Front page** (`apps/console/welcome`, `apps/console/src/welcome`): a
+  second document in the same build, where the console sends signed-out
+  visitors (with the route they asked for as `next`). It runs the
+  Scheduling Core's pure domain (`@access/scheduling/domain`:
+  `findAvailableSlots`, `checkSlot`, the state machine) on sample data in
+  the browser, so every time it shows is computed, and it touches no real
+  data: its only network use is the console's own sign-in, after which it
+  hands over to the console. The scroll-craft engine
+  (`apps/console/public/welcome/scrollcraft.js`, vendored unmodified)
+  drives the scroll; the page's own code drives its bespoke parts from the
+  engine's `--sc-p`. Its design record is `docs/front-page`.
 - **WhatsApp** (`packages/access`): Meta calls the API's webhook
   (`X-Hub-Signature-256` verified over the raw body, deduplicated by message
   id, routed by `phone_number_id` to the practice) and the API stores the

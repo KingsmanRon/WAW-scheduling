@@ -125,10 +125,57 @@ stage's published state to tell the difference.
 Checks: six device families (parallax, pin, pan, count, reveal, flow);
 no family twice in a row; zero `scrub`, zero `kinetic`, zero `spotlight`,
 zero `drift` (grounds are painted per act); the peak's 3.2 is the largest span
-by a visible margin over 2.6; about 10.9 viewport-heights in total, short
-because a working surface should be.
+by a visible margin over 2.6; 11.2 viewport-heights in total on a desktop
+(14.1 on a phone, where the flow acts run taller), short because a working
+surface should be.
 
 ## Fingerprint gate
 
 The registry (`docs/front-page/FINGERPRINTS.md`) was empty: this is the first
 build, so there was nothing to clear. Its row is appended after shipping.
+
+## Verification
+
+The skill's harness (`scripts/shoot.mjs`, run with Playwright's
+`bypassCSP` because the page ships a strict `style-src 'self'` policy and
+the harness injects a style tag to photograph the frame under each line)
+walked every act at six positions on desktop (1440 x 900), phone
+(390 x 844) and reduced motion. Contact sheets were tiled in a browser,
+since no full ffmpeg build was available; Chromium stood in for Chrome,
+which matters only for video, and the page has none.
+
+| Run                        | Result                                                       | Found, and what changed                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1, desktop                 | No dead scroll; one contrast failure (1.07:1 on "Cancelled") | The cancelled block's fill was a gradient the pass could not see as opaque; it now has a solid fill under its stripes. The sheet also showed: a next-day booking drawn on today's board, hour labels half a row off, the ledger's text split into grid cells, the close's heading never revealed (`data-sc-stagger` without `data-sc-in`), record lines wiping from the wrong side. All fixed. |
+| 2, desktop, phone, reduced | No dead scroll; every cue clears 4.5:1 at its worst frame    | Phone: the requests stage overflowed under the bars (the board now yields to the feed on phones), the day rail sat too low. Reduced motion: every state still arrives by opacity; the sideways day becomes a scroll region and its last time is reachable.                                                                                                                                     |
+
+The unit tests (`tests/unit/front-page-demo.test.ts`) run the race for
+every free time of the day and found one crash the sheets could not: a late
+choice (16:30) left fewer than 24 free times that day and the race threw.
+Refused requests now take the next free time on a later working day, and
+the board says how many went there.
+
+Browser tests (`tests/browser/front-page.spec.ts`) cover the hand-off (a
+deep link survives sign-in; sign-out starts over; a forged `next` stays in
+the console), the computed morning (5 placed, 25 / 1 / 24 / 0 at the end of
+the race), choosing a time by button and by keyboard focus in the rail
+(focus parks the act where the time is on screen), the skip link, reduced
+motion, and the chrome on a desktop and a phone.
+
+Not verified: a real phone (iOS Safari and Chrome on Android), and the
+Supabase sign-in path in a browser (the suites use the synthetic identity;
+the Supabase form is the console's previous, unchanged logic).
+
+## Feel check
+
+Written from the second run's sheets before rereading the curve above:
+recognition, order, intimacy, awe, trust, readiness.
+
+Diff: act 2 was meant to be pressure and read as calm order, because each
+request was placed a moment after it arrived. The page was wrong, not the
+brief: requests now pile up (all five arrive by 0.32 of the act, each
+showing "Checking the book…") before the Core clears them one by one, so
+the act holds pressure and then releases it. The peak is the largest visual
+change on the sheet and has the most scroll room (3.2 viewport-heights);
+the act before it is the quietest on the page; the last screen stands still
+with the form on it.

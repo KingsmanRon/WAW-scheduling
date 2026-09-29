@@ -6,6 +6,12 @@ waitlist. One **Scheduling Core** decides availability, holds, bookings and
 every change to an appointment; no channel books any other way, and the
 database itself refuses a double booking.
 
+- **Front page** (web): signed-out visitors land on a sample practice's
+  morning run by the Scheduling Core's own rules in the browser (built with
+  the scroll-craft procedure and engine): requests from every channel
+  placed on the book, a WhatsApp patient choosing a time, 25 simultaneous
+  requests for that time with exactly one held. It ends in the real
+  sign-in, which hands over to the console.
 - **Practice console** (web): today's list with arrivals and no-shows,
   day and week calendars by practitioner and location, guided booking with
   a five-minute hold, reschedule and cancel, patient search and
@@ -32,6 +38,7 @@ database itself refuses a double booking.
 | [docs/client-pilot-checklist.md](docs/client-pilot-checklist.md) | gates before real patient data                                           |
 | [docs/implementation-report.md](docs/implementation-report.md)   | what was built, how it was verified, what remains outside the repository |
 | [docs/referral-operations](docs/referral-operations/)            | the organisation referral workspace                                      |
+| [docs/front-page](docs/front-page/builds/access/BRIEF.md)        | the front page: brief, score and how it was verified                     |
 
 ## Repository
 
@@ -39,7 +46,8 @@ database itself refuses a double booking.
 apps/core-api      Fastify API (practice API, WhatsApp webhook, documents)
 apps/worker        outbox, notifications, WhatsApp access layer, waitlist,
                    webhooks, housekeeping; operator commands in src/cli
-apps/console       React console (Vite), deployed to Vercel
+apps/console       React console (Vite), deployed to Vercel; welcome/ is
+                   the front page signed-out visitors land on
 packages/scheduling  the Scheduling Core (domain + transactional commands)
 packages/patients    patient registry and normalised search
 packages/notifications, integrations, access, policy, contracts, db,
@@ -68,9 +76,10 @@ IDENTIFIER_HASH_KEY=111111111111111111111111111111111111111111111111111111111111
 VITE_AUTH_MODE=synthetic npm -w @access/console run dev    # console :3000
 ```
 
-Sign in with organisation `11111111-1111-4111-8111-111111111111`, any
-practice role and a name (the synthetic bridge exists only for local and
-staging use).
+Open the console: signed out, it shows the front page at `/welcome/`.
+Sign in at its end with organisation `11111111-1111-4111-8111-111111111111`,
+any practice role and a name (the synthetic bridge exists only for local
+and staging use).
 
 ## Checks
 

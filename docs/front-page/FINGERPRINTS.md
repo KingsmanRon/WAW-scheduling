@@ -26,11 +26,9 @@ changes only grammar and world will fail it.
 
 ## The registry
 
-| Build | Grammar | Nav treatment | Hero device | Act-sequence shape | Close pattern | Signature move | World | Port |
-| ----- | ------- | ------------- | ----------- | ------------------ | ------------- | -------------- | ----- | ---- |
-
-_(empty: your first build has nothing to clear, so build whatever the interview
-points at. From the second onwards, this table is the constraint.)_
+| Build    | Grammar                                                                                                                    | Nav treatment                                                                                                                   | Hero device                                                                                                                                                                                                                | Act-sequence shape                                                                                     | Close pattern                                                                     | Signature move                                                                                                                                                                                                    | World                                                                                                                                  | Port                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `access` | Live surface: the page behaves like the ACCESS console and runs its Scheduling Core in the browser on labelled sample data | The console's own rail (tab bar and top bar on phones), items are the acts; a "Sign in" button where the console has "Sign out" | The Today view already mid-morning, operable (visit steps go through the state machine); a first-run help card holds the `h1`; depth from a blurred next-day sheet behind a WhatsApp phone, parallax and fine-pointer tilt | `flow > pin > pan > pin > flow > flow`, 6 acts, ~11.2vh; zero `scrub`, `kinetic`, `spotlight`, `drift` | The real sign-in form, carrying the time the visitor chose; footer inside the act | **The race for your time**: the visitor picks the time a WhatsApp patient taps, then 25 simultaneous requests converge on that cell; one holds, 24 are refused and settle into the next free times, computed live | Clinical night rail on a pale console surface; night stage for the peak; Geist and Geist Mono; coral reserved for "a person is needed" | `/welcome/` in the console build |
 
 ---
 
@@ -41,7 +39,10 @@ reusing: a grammar, a nav treatment, a close pattern, a signature move, an
 act-count-and-length band. The shared columns are what the next build inherits
 as a constraint, so writing them down is the whole point.
 
-Nothing is taken yet.
+- Live surface as a product's own console (app chrome as navigation, an
+  operable working surface as the hero, the real sign-in as the close).
+- A scroll-driven race of simultaneous requests on one cell.
+- The 6-act, ~11vh band with no scrub.
 
 ---
 

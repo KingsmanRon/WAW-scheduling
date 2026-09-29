@@ -171,7 +171,7 @@ export async function resolveConversation(
     throw new AppError(
       409,
       "VERSION_CONFLICT",
-      "the conversation changed; reload it",
+      "The conversation has changed since it was loaded. Check it and try again.",
     );
   if (input.patientId) {
     const p = await c.query(

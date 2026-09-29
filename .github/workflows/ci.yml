@@ -92,7 +92,7 @@ jobs:
       - name: Browser end-to-end (reception booking and visit lifecycle, walk-in registration, reschedule and cancel, two-desk double booking, roles, blocks and leave, WhatsApp to console and back, waitlist offer accepted on WhatsApp)
         run: npx playwright test
       - name: Assert browser suite ran without skips or flakes
-        run: node scripts/assert-test-report.mjs e2e-report.json 22
+        run: node scripts/assert-test-report.mjs e2e-report.json 23
       - name: Upload browser test evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { label } from "../../format";
 import { PageHeader } from "../../layout/PageHeader";
+import { errorCode } from "../api";
 import { usePractice } from "../context";
 import { useLink, type ViewProps } from "../PracticeApp";
 import { fmt } from "../time";
@@ -128,17 +129,20 @@ export function Conversations({ route, go }: ViewProps) {
   );
 }
 
+interface ThreadData {
+  conversation: ConversationSummary;
+  messages: ConversationMessage[];
+}
+/** Waiting for a reply to leave: checked this often, for at most this long. */
+const SEND_CHECK_MS = 500;
+const SEND_WAIT_MS = 6000;
+
 function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
   const practice = usePractice();
   const link = useLink();
-  const thread = useLoad(
-    () =>
-      practice.client.get<{
-        conversation: ConversationSummary;
-        messages: ConversationMessage[];
-      }>(`/conversations/${id}`),
-    [id, practice.tick],
-  );
+  const fetchThread = () =>
+    practice.client.get<ThreadData>(`/conversations/${id}`);
+  const thread = useLoad(fetchThread, [id, practice.tick]);
   const [reply, setReply] = useState("");
   const [linking, setLinking] = useState(false);
   const action = useAction();
@@ -150,17 +154,52 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
     patient_id?: string;
   }) =>
     void action.run(async () => {
-      try {
-        await practice.client.send("PATCH", `/conversations/${c.id}`, {
+      const patch = (version: number) =>
+        practice.client.send("PATCH", `/conversations/${c.id}`, {
           ...change,
-          expected_version: c.version,
+          expected_version: version,
         });
+      try {
+        try {
+          await patch(c.version);
+        } catch (e) {
+          // Linking only names the patient. If nobody has linked one since
+          // the thread loaded, whatever moved the version (a message sent or
+          // received) does not bear on it, so it goes onto the current one.
+          // Handing back or closing is refused instead, for staff to see
+          // what changed first.
+          if (change.status || errorCode(e) !== "VERSION_CONFLICT") throw e;
+          const current = (await fetchThread()).conversation;
+          if (current.patient) throw e;
+          await patch(current.version);
+        }
       } finally {
         // Also after a conflict: the next attempt then uses the current version.
+        await thread.reload();
         practice.changed();
       }
       if (change.status) onResolved();
     });
+  /**
+   * The worker sends a reply in the background and then records it on the
+   * conversation, which moves its version. Until then, handing back,
+   * closing or linking would be refused as a conflicting change, so they
+   * wait for the send (or give up waiting after a few seconds).
+   */
+  const sent = async (messageId: string) => {
+    for (let waited = 0; waited < SEND_WAIT_MS; waited += SEND_CHECK_MS) {
+      await new Promise((r) => setTimeout(r, SEND_CHECK_MS));
+      let status: string | undefined;
+      try {
+        const { messages } = await fetchThread();
+        status = messages.find((m) => m.id === messageId)?.status;
+      } catch {
+        // The reply is already accepted; the reload that follows shows the rest.
+        return;
+      }
+      if (status !== "PENDING" && status !== "SENDING") return;
+    }
+  };
   return (
     <section className="panel thread">
       <header className="thread__head">
@@ -181,6 +220,7 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
             <button
               type="button"
               className="btn btn-secondary"
+              disabled={action.busy}
               onClick={() => setLinking(!linking)}
             >
               Link patient
@@ -260,12 +300,16 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
             e.preventDefault();
             if (!reply.trim()) return;
             void action.run(async () => {
-              await practice.client.send(
-                "POST",
-                `/conversations/${c.id}/messages`,
-                { body: reply.trim() },
-              );
+              const { message_id } = await practice.client.send<{
+                message_id: string;
+              }>("POST", `/conversations/${c.id}/messages`, {
+                body: reply.trim(),
+              });
               setReply("");
+              // Show it as pending straight away, then as sent.
+              await thread.reload();
+              await sent(message_id);
+              await thread.reload();
               practice.changed();
             });
           }}

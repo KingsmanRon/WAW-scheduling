@@ -150,6 +150,12 @@ cannot reach the bundle.
   on API responses, HSTS outside local; the console has a build-time CSP
   limited to its API and Supabase project, plus frame-ancestors, HSTS and
   permissions policy from Vercel.
+- **Front page** (`/welcome/`): the same build-time CSP as the console. It
+  shows only fictional sample data computed in the browser and calls
+  nothing but the console's own sign-in. The hand-off back to the console
+  accepts a `next` only when it is a console route (`#/...`), so the page
+  cannot be used to redirect a signed-in user elsewhere. Signing out starts
+  over (no `next`).
 
 ## The language model
 
