@@ -4,7 +4,7 @@ import { PageHeader } from "../../layout/PageHeader";
 import { usePractice } from "../context";
 import { useLink } from "../PracticeApp";
 import { fmt } from "../time";
-import type { Delivery } from "../types";
+import { MESSAGE_LABELS, type Delivery } from "../types";
 import { Empty, ErrorNote, Loading, Tone, useLoad } from "../ui";
 
 const SKIPPED: Record<string, string> = {
@@ -26,8 +26,8 @@ const CANCELLED: Record<string, string> = {
   OFFER_CLOSED: "the waitlist offer was answered or lapsed",
 };
 
-/** What happened to one message, in words. */
-export function deliveryStatus(d: Delivery): string {
+/** What happened to one message, in words (times in the practice's zone). */
+export function deliveryStatus(d: Delivery, tz: string): string {
   switch (d.status) {
     case "SKIPPED":
       return `Not sent: ${SKIPPED[d.skip_reason ?? ""] ?? label(d.skip_reason ?? "unknown")}`;
@@ -39,9 +39,15 @@ export function deliveryStatus(d: Delivery): string {
       return d.attempt_count
         ? `Retrying (${d.attempt_count} attempt${d.attempt_count === 1 ? "" : "s"} so far)`
         : "Waiting to be sent";
-    default:
-      return label(d.status);
+    default: {
+      const at = d.read_at ?? d.delivered_at ?? d.sent_at;
+      return at ? `${label(d.status)} ${fmt.when(at, tz)}` : label(d.status);
+    }
   }
+}
+/** The message's kind, as staff name it. */
+export function messageLabel(d: Delivery): string {
+  return MESSAGE_LABELS[d.notification_type] ?? label(d.notification_type);
 }
 const TONE: Record<
   string,
@@ -134,7 +140,7 @@ export function Notifications() {
           <table className="table">
             <thead>
               <tr>
-                <th scope="col">Planned</th>
+                <th scope="col">Queued</th>
                 <th scope="col">Message</th>
                 <th scope="col">To</th>
                 <th scope="col">Status</th>
@@ -144,20 +150,22 @@ export function Notifications() {
               {list.data.items.map((d) => (
                 <tr key={d.id}>
                   <td className="num small">
-                    {fmt.when(d.scheduled_for, practice.tz)}
+                    {fmt.when(d.created_at, practice.tz)}
+                    {Date.parse(d.scheduled_for) - Date.parse(d.created_at) >
+                      60_000 && (
+                      <div className="muted">
+                        Due {fmt.when(d.scheduled_for, practice.tz)}
+                      </div>
+                    )}
                   </td>
                   <td>
-                    {label(d.notification_type)}
+                    {messageLabel(d)}
                     {d.appointment_id && (
-                      <>
-                        {" "}
-                        <a
-                          className="small"
-                          href={link("appointment", d.appointment_id)}
-                        >
-                          appointment
+                      <div className="small">
+                        <a href={link("appointment", d.appointment_id)}>
+                          Open appointment
                         </a>
-                      </>
+                      </div>
                     )}
                   </td>
                   <td>
@@ -170,7 +178,9 @@ export function Notifications() {
                     <Tone tone={TONE[d.status] ?? "closed"}>
                       {label(d.status)}
                     </Tone>
-                    <div className="muted small">{deliveryStatus(d)}</div>
+                    <div className="muted small">
+                      {deliveryStatus(d, practice.tz)}
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -363,11 +363,31 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
       type: "text",
       text: "Dr Naidoo will call you in the next few minutes.",
     });
+    // Linking the patient alone keeps the conversation with reception.
+    const linked = await api.app.inject({
+      method: "PATCH",
+      url: `${base}/${item.id}`,
+      headers: { ...headers, "idempotency-key": randomUUID() },
+      payload: { patient_id: patient, expected_version: item.version + 1 },
+    });
+    expect(linked.statusCode).toBe(200);
+    expect(linked.json().conversation).toMatchObject({
+      status: "NEEDS_STAFF",
+      needs_staff_reason: "SAFETY_CONCERN",
+      patient: { id: patient },
+    });
+    const nothing = await api.app.inject({
+      method: "PATCH",
+      url: `${base}/${item.id}`,
+      headers: { ...headers, "idempotency-key": randomUUID() },
+      payload: { expected_version: item.version + 2 },
+    });
+    expect(nothing.statusCode).toBe(400);
     const resolved = await api.app.inject({
       method: "PATCH",
       url: `${base}/${item.id}`,
       headers: { ...headers, "idempotency-key": randomUUID() },
-      payload: { status: "ACTIVE", expected_version: item.version + 1 },
+      payload: { status: "ACTIVE", expected_version: item.version + 2 },
     });
     expect(resolved.statusCode).toBe(200);
     expect(resolved.json().conversation.status).toBe("ACTIVE");
@@ -379,6 +399,7 @@ describe.runIf(databaseEnabled)("WhatsApp channel and access layer", () => {
     );
     expect(audit.rows.map((r) => r.action)).toEqual([
       "conversation.replied",
+      "conversation.patient_linked",
       "conversation.resolved",
     ]);
   });

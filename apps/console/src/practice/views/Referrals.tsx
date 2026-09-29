@@ -141,17 +141,19 @@ export function Referrals({ route }: ViewProps) {
                       </span>
                     )}
                   </td>
-                  <td>
+                  <td data-label="Covers">
                     {r.appointment_type?.name ?? (
                       <span className="muted">Any type</span>
                     )}
                   </td>
-                  <td>
-                    {r.valid_until ?? (
+                  <td data-label="Valid until">
+                    {r.valid_until ? (
+                      fmt.date(r.valid_until)
+                    ) : (
                       <span className="muted">No end date</span>
                     )}
                   </td>
-                  <td className="num">
+                  <td className="num" data-label="Used">
                     {r.appointments_used}
                     {r.max_appointments !== null && ` of ${r.max_appointments}`}
                   </td>
@@ -184,7 +186,7 @@ export function Referrals({ route }: ViewProps) {
           }}
         />
       )}
-      <p className="muted small">
+      <p className="muted small footnote">
         Booking checks referrals itself;{" "}
         <a href={link("book")}>book an appointment</a> and choose the referral
         there.
@@ -263,17 +265,17 @@ function RegisterReferralDialog({
             <PatientPicker onPick={setPatient} />
           )}
         </div>
+        <div className="field">
+          <label htmlFor="ref-doctor">Referring practitioner</label>
+          <input
+            id="ref-doctor"
+            value={doctor}
+            onChange={(e) => setDoctor(e.target.value)}
+            required
+            maxLength={120}
+          />
+        </div>
         <div className="form-row">
-          <div className="field">
-            <label htmlFor="ref-doctor">Referring practitioner</label>
-            <input
-              id="ref-doctor"
-              value={doctor}
-              onChange={(e) => setDoctor(e.target.value)}
-              required
-              maxLength={120}
-            />
-          </div>
           <div className="field">
             <label htmlFor="ref-practice">
               Their practice <span className="optional">(optional)</span>
@@ -285,8 +287,6 @@ function RegisterReferralDialog({
               maxLength={120}
             />
           </div>
-        </div>
-        <div className="form-row">
           <div className="field">
             <label htmlFor="ref-number">
               Practice number <span className="optional">(optional)</span>
@@ -298,6 +298,8 @@ function RegisterReferralDialog({
               maxLength={30}
             />
           </div>
+        </div>
+        <div className="form-row">
           <div className="field">
             <label htmlFor="ref-issued">Issued on</label>
             <input

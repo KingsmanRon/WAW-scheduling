@@ -1,4 +1,5 @@
 package-lock.json
+apps/console/public/welcome/scrollcraft.*
 dist
 .next
 coverage

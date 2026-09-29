@@ -2,7 +2,10 @@
   "name": "@access/scheduling",
   "version": "0.1.0",
   "type": "module",
-  "exports": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./domain": "./dist/domain/index.js"
+  },
   "scripts": {
     "build": "tsc -b"
   },

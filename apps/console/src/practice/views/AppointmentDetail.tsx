@@ -26,7 +26,7 @@ import {
   useAction,
   useLoad,
 } from "../ui";
-import { deliveryStatus } from "./Notifications";
+import { deliveryStatus, messageLabel } from "./Notifications";
 
 type Action = ReturnType<typeof useAction>;
 
@@ -409,12 +409,12 @@ export function AppointmentDetail({ route, go }: ViewProps) {
                   {messages.data.map((d) => (
                     <li key={d.id}>
                       <span>
-                        {label(d.notification_type)} · {label(d.channel)}
+                        {messageLabel(d)} · {label(d.channel)}
                       </span>
                       <time dateTime={d.created_at}>
                         {fmt.when(d.created_at, practice.tz)}
                       </time>
-                      <small>{deliveryStatus(d)}</small>
+                      <small>{deliveryStatus(d, practice.tz)}</small>
                     </li>
                   ))}
                 </ul>

@@ -59,6 +59,8 @@ export interface SyntheticIdentity {
 }
 interface Session {
   me: Me | null;
+  /** The first answer about who is signed in has arrived (me may still be null). */
+  ready: boolean;
   headers(): Promise<Record<string, string>>;
   selectTenant(tenantId: string | null): void;
   tenant: string | null;
@@ -75,16 +77,33 @@ export function useSession(): Session {
   return s;
 }
 
+/** Survives the hand-over between the front page and the console (same tab only). */
+function stored(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function store(key: string, value: string | null): void {
+  try {
+    if (value === null) sessionStorage.removeItem(key);
+    else sessionStorage.setItem(key, value);
+  } catch {
+    // storage unavailable: the value lasts until reload
+  }
+}
+
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
-  const [tenant, setTenant] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  const [tenant, setTenant] = useState<string | null>(() =>
+    AUTH_MODE === "supabase" ? stored("access-tenant") : null,
+  );
   // Synthetic development identity survives a reload within the tab only.
   const [synthetic, setSynthetic] = useState<SyntheticIdentity | null>(() => {
     try {
-      const raw =
-        AUTH_MODE === "synthetic"
-          ? sessionStorage.getItem("access-synthetic")
-          : null;
+      const raw = AUTH_MODE === "synthetic" ? stored("access-synthetic") : null;
       return raw ? (JSON.parse(raw) as SyntheticIdentity) : null;
     } catch {
       return null;
@@ -113,37 +132,32 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     };
     return {
       me,
+      ready,
       tenant,
       synthetic,
       error,
       headers,
       selectTenant: (id) => {
+        store("access-tenant", id);
         setTenant(id);
         setVersion((v) => v + 1);
       },
       signInSynthetic: (identity) => {
-        try {
-          sessionStorage.setItem("access-synthetic", JSON.stringify(identity));
-        } catch {
-          // storage unavailable: identity lasts until reload
-        }
+        store("access-synthetic", JSON.stringify(identity));
         setSynthetic(identity);
         setVersion((v) => v + 1);
       },
       signOut: async () => {
         if (AUTH_MODE === "supabase") await supabaseClient().auth.signOut();
-        try {
-          sessionStorage.removeItem("access-synthetic");
-        } catch {
-          // nothing stored
-        }
+        store("access-synthetic", null);
+        store("access-tenant", null);
         setSynthetic(null);
         setMe(null);
         setTenant(null);
       },
       refresh: async () => setVersion((v) => v + 1),
     };
-  }, [me, tenant, synthetic, error]);
+  }, [me, ready, tenant, synthetic, error]);
 
   useEffect(() => {
     if (AUTH_MODE !== "supabase") return;
@@ -156,25 +170,29 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (AUTH_MODE === "synthetic" && !synthetic) return setMe(null);
-      const res = await fetch(`${API_URL}/v1/me`, {
-        headers: await session.headers(),
-      }).catch(() => null);
-      if (cancelled) return;
-      if (!res) return setError("The ACCESS API is unreachable.");
-      if (res.status === 401) return setMe(null);
-      const body = await res.json();
-      if (!res.ok) {
-        setMe(null);
-        setError(
-          body.error === "TENANT_SELECTION_REQUIRED"
-            ? "TENANT_SELECTION_REQUIRED"
-            : (body.message ?? "Access denied"),
-        );
-        return;
+      try {
+        if (AUTH_MODE === "synthetic" && !synthetic) return setMe(null);
+        const res = await fetch(`${API_URL}/v1/me`, {
+          headers: await session.headers(),
+        }).catch(() => null);
+        if (cancelled) return;
+        if (!res) return setError("The ACCESS API is unreachable.");
+        if (res.status === 401) return setMe(null);
+        const body = await res.json();
+        if (!res.ok) {
+          setMe(null);
+          setError(
+            body.error === "TENANT_SELECTION_REQUIRED"
+              ? "TENANT_SELECTION_REQUIRED"
+              : (body.message ?? "Access denied"),
+          );
+          return;
+        }
+        setError("");
+        setMe({ ...body, practices: body.practices ?? [] });
+      } finally {
+        if (!cancelled) setReady(true);
       }
-      setError("");
-      setMe({ ...body, practices: body.practices ?? [] });
     })();
     return () => {
       cancelled = true;

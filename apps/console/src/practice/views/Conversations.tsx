@@ -4,11 +4,7 @@ import { PageHeader } from "../../layout/PageHeader";
 import { usePractice } from "../context";
 import { useLink, type ViewProps } from "../PracticeApp";
 import { fmt } from "../time";
-import type {
-  ConversationMessage,
-  ConversationSummary,
-  PatientSummary,
-} from "../types";
+import type { ConversationMessage, ConversationSummary } from "../types";
 import {
   Empty,
   ErrorNote,
@@ -149,15 +145,21 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
   if (thread.error && !thread.data) return <ErrorNote error={thread.error} />;
   if (!thread.data) return <Loading what="the conversation" />;
   const { conversation: c, messages } = thread.data;
-  const resolve = (status: "ACTIVE" | "CLOSED", patient?: PatientSummary) =>
+  const update = (change: {
+    status?: "ACTIVE" | "CLOSED";
+    patient_id?: string;
+  }) =>
     void action.run(async () => {
-      await practice.client.send("PATCH", `/conversations/${c.id}`, {
-        status,
-        expected_version: c.version,
-        ...(patient ? { patient_id: patient.id } : {}),
-      });
-      practice.changed();
-      if (!patient) onResolved();
+      try {
+        await practice.client.send("PATCH", `/conversations/${c.id}`, {
+          ...change,
+          expected_version: c.version,
+        });
+      } finally {
+        // Also after a conflict: the next attempt then uses the current version.
+        practice.changed();
+      }
+      if (change.status) onResolved();
     });
   return (
     <section className="panel thread">
@@ -189,7 +191,7 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
               type="button"
               className="btn btn-secondary"
               disabled={action.busy}
-              onClick={() => resolve("ACTIVE")}
+              onClick={() => update({ status: "ACTIVE" })}
             >
               Hand back to the assistant
             </button>
@@ -197,11 +199,11 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
           {c.status !== "CLOSED" && (
             <button
               type="button"
-              className="btn btn-quiet"
+              className="btn btn-secondary"
               disabled={action.busy}
-              onClick={() => resolve("CLOSED")}
+              onClick={() => update({ status: "CLOSED" })}
             >
-              Close
+              Close conversation
             </button>
           )}
         </div>
@@ -215,12 +217,13 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
       {linking && (
         <div className="thread__link">
           <p className="small muted">
-            Link the conversation to the patient you identified with them.
+            Link the conversation to the patient you identified with them. It
+            stays with reception until you hand it back or close it.
           </p>
           <PatientPicker
             onPick={(p) => {
               setLinking(false);
-              resolve(c.status === "CLOSED" ? "CLOSED" : "ACTIVE", p);
+              update({ patient_id: p.id });
             }}
           />
         </div>

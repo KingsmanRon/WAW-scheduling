@@ -187,9 +187,13 @@ function Hours() {
                     {fmt.minute(r.start_minute)}–{fmt.minute(r.end_minute)}
                   </td>
                   <td>{practice.location(r.location_id)?.name}</td>
-                  <td>{r.valid_from}</td>
-                  <td>
-                    {r.valid_until ?? <span className="muted">Open-ended</span>}
+                  <td data-label="From">{fmt.date(r.valid_from)}</td>
+                  <td data-label="Until">
+                    {r.valid_until ? (
+                      fmt.date(r.valid_until)
+                    ) : (
+                      <span className="muted">Open-ended</span>
+                    )}
                   </td>
                   <td>
                     {manage && (

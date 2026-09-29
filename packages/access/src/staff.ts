@@ -160,7 +160,8 @@ export async function resolveConversation(
   ctx: StaffContext,
   id: string,
   input: {
-    status: "ACTIVE" | "CLOSED";
+    /** Omitted: only the patient link changes and reception keeps it. */
+    status?: "ACTIVE" | "CLOSED";
     patientId?: string | null;
     expectedVersion: number;
   },
@@ -180,28 +181,46 @@ export async function resolveConversation(
     if (!p.rowCount)
       throw new AppError(404, "PATIENT_NOT_FOUND", "patient not found");
   }
-  await c.query(
-    `UPDATE messaging.channel_conversations
-        SET status=$4, needs_staff_reason=NULL, state='IDLE', state_data='{}', state_expires_at=NULL,
-            patient_id=CASE WHEN $5::boolean THEN $6::uuid ELSE patient_id END,
-            resolved_by=$7, version=version+1, updated_at=now()
-      WHERE tenant_id=$1 AND practice_id=$2 AND id=$3`,
-    [
-      ctx.tenantId,
-      ctx.practiceId,
-      id,
-      input.status,
-      input.patientId !== undefined,
-      input.patientId ?? null,
-      ctx.actor.id,
-    ],
-  );
+  if (input.status === undefined && input.patientId === undefined)
+    throw new AppError(
+      400,
+      "VALIDATION_FAILED",
+      "a status or a patient is required",
+    );
+  if (input.status === undefined)
+    // Linking only: the conversation stays where it is (with reception).
+    await c.query(
+      `UPDATE messaging.channel_conversations
+          SET patient_id=$4::uuid, version=version+1, updated_at=now()
+        WHERE tenant_id=$1 AND practice_id=$2 AND id=$3`,
+      [ctx.tenantId, ctx.practiceId, id, input.patientId ?? null],
+    );
+  else
+    await c.query(
+      `UPDATE messaging.channel_conversations
+          SET status=$4, needs_staff_reason=NULL, state='IDLE', state_data='{}', state_expires_at=NULL,
+              patient_id=CASE WHEN $5::boolean THEN $6::uuid ELSE patient_id END,
+              resolved_by=$7, version=version+1, updated_at=now()
+        WHERE tenant_id=$1 AND practice_id=$2 AND id=$3`,
+      [
+        ctx.tenantId,
+        ctx.practiceId,
+        id,
+        input.status,
+        input.patientId !== undefined,
+        input.patientId ?? null,
+        ctx.actor.id,
+      ],
+    );
   const after = await summary(c, ctx, id);
   await recordAuditEvent(c, {
     tenantId: ctx.tenantId,
     practiceId: ctx.practiceId,
     actor: ctx.actor,
-    action: "conversation.resolved",
+    action:
+      input.status === undefined
+        ? "conversation.patient_linked"
+        : "conversation.resolved",
     resourceType: "conversation",
     resourceId: id,
     channel: "WHATSAPP",

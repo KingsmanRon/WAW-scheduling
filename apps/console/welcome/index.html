@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en-ZA">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <title>ACCESS · one appointment book for every channel</title>
+    <meta
+      name="description"
+      content="ACCESS keeps a medical practice's appointments from reception, WhatsApp, referrals and the waitlist in one book that never gives a time twice."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect x='.5' y='.5' width='27' height='27' rx='7.5' fill='%2310252a'/%3E%3Cpath d='M6 17.5h9.5l3-7H22' fill='none' stroke='%238fd9c5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='21.5' cy='10.5' r='3.1' fill='%23f0714e'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/welcome/scrollcraft.css" />
+  </head>
+  <body class="wp">
+    <a class="wp-skip" href="#sign-in">Skip to sign in</a>
+
+    <!-- The console's own chrome is the navigation: a rail on wide screens,
+         a top bar and tab bar on phones. -->
+    <nav class="wp-rail" aria-label="This page">
+      <a class="wp-brand" href="#today">
+        <span class="wp-mark" data-mark></span>
+        <span class="wp-brand__text">
+          <span class="wp-brand__word">ACCESS</span>
+          <span class="wp-brand__sub">Jacaranda Family Practice</span>
+        </span>
+      </a>
+      <p class="wp-sample"><span data-icon="shield"></span>Sample data</p>
+      <ul class="wp-nav">
+        <li>
+          <a href="#today" data-spy="today"
+            ><span data-icon="today"></span>Today</a
+          >
+        </li>
+        <li>
+          <a href="#channels" data-spy="channels"
+            ><span data-icon="list"></span>Requests<span
+              class="wp-count"
+              data-bind="request-count"
+            ></span
+          ></a>
+        </li>
+        <li>
+          <a href="#whatsapp" data-spy="whatsapp"
+            ><span data-icon="message"></span>WhatsApp</a
+          >
+        </li>
+        <li>
+          <a href="#race" data-spy="race"
+            ><span data-icon="calendar"></span>Calendar</a
+          >
+        </li>
+        <li>
+          <a href="#record" data-spy="record"
+            ><span data-icon="shield"></span>Record</a
+          >
+        </li>
+      </ul>
+      <div class="wp-rail__foot">
+        <dl class="wp-context-list">
+          <div>
+            <dt>Clock</dt>
+            <dd>08:57, scenario time</dd>
+          </div>
+          <div>
+            <dt>Times</dt>
+            <dd>Computed in this browser</dd>
+          </div>
+        </dl>
+        <a class="wp-btn wp-btn--block" href="#sign-in" data-spy="sign-in"
+          ><span data-icon="signIn"></span>Sign in</a
+        >
+      </div>
+    </nav>
+
+    <header class="wp-topbar">
+      <a class="wp-brand" href="#today">
+        <span class="wp-mark" data-mark></span>
+        <span class="wp-brand__word">ACCESS</span>
+      </a>
+      <p class="wp-sample"><span data-icon="shield"></span>Sample data</p>
+      <a class="wp-btn wp-btn--small" href="#sign-in">Sign in</a>
+    </header>
+
+    <main id="top">
+      <!-- 1 · Today: the console already in a morning -->
+      <section
+        id="today"
+        class="wp-act wp-today"
+        data-sc-act="flow"
+        aria-labelledby="intro-title"
+      >
+        <div class="wp-inner">
+          <section class="wp-help" aria-labelledby="intro-title">
+            <h1 class="wp-help__title" id="intro-title">
+              ACCESS keeps one appointment book for every way patients reach
+              your practice.
+            </h1>
+            <p class="wp-help__body">
+              Reception, WhatsApp, referrals and the waitlist book into the same
+              book, and a time is never given twice.
+            </p>
+            <p class="wp-help__note">
+              <span data-icon="info"></span>
+              <span
+                >The practice below is sample data. Every time on this page is
+                computed in your browser by the Scheduling Core. Scroll to run
+                its morning.</span
+              >
+            </p>
+            <a class="wp-btn" href="#sign-in"
+              ><span data-icon="signIn"></span>Sign in</a
+            >
+          </section>
+
+          <header class="wp-head">
+            <div>
+              <h2 class="wp-title">Today</h2>
+              <p class="wp-context">
+                <span data-bind="today-long"></span> · Jacaranda Family Practice
+              </p>
+            </div>
+            <p class="wp-clock"><span class="wp-live"></span>08:57</p>
+          </header>
+
+          <ul class="wp-tiles" data-bind="tiles" aria-label="Today so far"></ul>
+
+          <div class="wp-alerts">
+            <a class="wp-alert wp-alert--quiet" href="#whatsapp"
+              ><span data-icon="message"></span>1 WhatsApp conversation with the
+              booking assistant</a
+            >
+            <a class="wp-alert wp-alert--quiet" href="#channels"
+              ><span data-icon="document"></span>1 referral arriving</a
+            >
+          </div>
+
+          <div class="wp-surface">
+            <div class="wp-panel wp-list-panel">
+              <table class="wp-table">
+                <caption class="vh">
+                  Today's appointments
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Time</th>
+                    <th scope="col">Patient</th>
+                    <th scope="col">With</th>
+                    <th scope="col">Status</th>
+                    <th scope="col"><span class="vh">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody data-bind="today-list"></tbody>
+              </table>
+              <p class="wp-panel__foot" data-bind="today-note">
+                Arrivals and visit steps here work: they go through the
+                Scheduling Core's state machine.
+              </p>
+            </div>
+            <div class="wp-depth">
+              <div class="wp-far" data-sc-parallax="0.9" aria-hidden="true">
+                <div class="wp-panel wp-far__sheet">
+                  <p class="wp-far__title" data-bind="next-long"></p>
+                  <ol class="wp-far__list" data-bind="next-preview"></ol>
+                </div>
+              </div>
+              <div class="wp-near" data-sc-parallax="-1.4">
+                <div class="wp-phone" data-sc-tilt="4" aria-hidden="true">
+                  <p class="wp-phone__head">
+                    <span class="wp-phone__avatar">LM</span>
+                    <span
+                      ><strong>Lerato Mahlangu</strong
+                      ><span>WhatsApp · with the assistant</span></span
+                    >
+                  </p>
+                  <ol class="wp-thread">
+                    <li
+                      class="wp-bubble wp-bubble--in"
+                      data-bind="followed-ask"
+                    ></li>
+                    <li class="wp-bubble wp-bubble--typing">
+                      <span></span><span></span><span></span>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 · Every channel: the surface holds while requests are placed -->
+      <section
+        id="channels"
+        class="wp-act"
+        data-sc-act="pin"
+        data-sc-span="2"
+        aria-labelledby="channels-title"
+      >
+        <div data-sc-stage class="wp-stage wp-channels">
+          <div class="wp-inner">
+            <header class="wp-head">
+              <div>
+                <h2 class="wp-title" id="channels-title">Requests</h2>
+                <p class="wp-context">
+                  Five requests in eight minutes, from five channels. The
+                  Scheduling Core places each one on the book as it arrives.
+                </p>
+              </div>
+            </header>
+            <div class="wp-channels__grid">
+              <ol class="wp-feed" data-bind="feed"></ol>
+              <div class="wp-panel wp-board-panel">
+                <p class="wp-panel__title">
+                  Today's book, <span data-bind="today-short"></span>
+                </p>
+                <div class="wp-board" data-bind="board-today"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3 · WhatsApp: one patient, the next day passing sideways -->
+      <section
+        id="whatsapp"
+        class="wp-act"
+        data-sc-act="pan"
+        data-sc-span="2.6"
+        aria-labelledby="whatsapp-title"
+      >
+        <div data-sc-stage class="wp-stage wp-whatsapp">
+          <div class="wp-inner wp-whatsapp__top">
+            <header class="wp-head">
+              <div>
+                <h2 class="wp-title" id="whatsapp-title">WhatsApp</h2>
+                <p class="wp-context">
+                  Lerato Mahlangu, with the booking assistant. Choose the time
+                  she taps.
+                </p>
+              </div>
+            </header>
+          </div>
+          <div class="wp-phone wp-phone--large">
+            <p class="wp-phone__head">
+              <span class="wp-phone__avatar">LM</span>
+              <span
+                ><strong>Lerato Mahlangu</strong
+                ><span>WhatsApp · with the assistant</span></span
+              >
+            </p>
+            <ol class="wp-thread" data-bind="thread"></ol>
+          </div>
+          <ol class="wp-day" data-sc-pan="0.02" data-bind="day"></ol>
+        </div>
+      </section>
+
+      <!-- 4 · Your time: the peak -->
+      <section
+        id="race"
+        class="wp-act wp-night"
+        data-sc-act="pin"
+        data-sc-span="3.2"
+        aria-labelledby="race-title"
+      >
+        <div data-sc-stage class="wp-stage wp-race" data-sc-verify-state="">
+          <div class="wp-inner wp-race__inner">
+            <header class="wp-head">
+              <div>
+                <h2 class="wp-title" id="race-title">Calendar</h2>
+                <p class="wp-context" data-bind="race-context"></p>
+              </div>
+            </header>
+            <div class="wp-race__field" data-bind="field">
+              <div
+                class="wp-board wp-board--night"
+                data-bind="board-next"
+              ></div>
+              <div class="wp-chips" data-bind="chips" aria-hidden="true"></div>
+            </div>
+            <aside class="wp-ledger" aria-label="What happened to 25 requests">
+              <p class="wp-ledger__row">
+                <span class="wp-ledger__n"
+                  ><span data-sc-count="0 25" data-sc-count-at="0.16 0.4"
+                    >0</span
+                  ></span
+                ><span class="wp-ledger__text"
+                  >requests for <span data-bind="race-time"></span>, within 20
+                  ms</span
+                >
+              </p>
+              <p class="wp-ledger__row wp-ledger__row--held">
+                <span class="wp-ledger__n"
+                  ><span data-sc-count="0 1" data-sc-count-at="0.4 0.44"
+                    >0</span
+                  ></span
+                ><span class="wp-ledger__text"
+                  >held for the first to arrive</span
+                >
+              </p>
+              <p class="wp-ledger__row">
+                <span class="wp-ledger__n"
+                  ><span data-sc-count="0 24" data-sc-count-at="0.46 0.82"
+                    >0</span
+                  ></span
+                ><span class="wp-ledger__text"
+                  >refused, <code>SLOT_UNAVAILABLE</code>, each given the next
+                  free time</span
+                >
+              </p>
+              <p class="wp-ledger__row wp-ledger__row--zero">
+                <span class="wp-ledger__n">0</span
+                ><span class="wp-ledger__text">times given twice</span>
+              </p>
+              <p class="wp-ledger__note">
+                The same race runs in ACCESS's test suite against PostgreSQL: 25
+                simultaneous bookings of one time, exactly one booked. In the
+                real system the database refuses the second booking.
+              </p>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 · The record -->
+      <section
+        id="record"
+        class="wp-act wp-record"
+        data-sc-act="flow"
+        aria-labelledby="record-title"
+      >
+        <div class="wp-inner">
+          <header class="wp-head">
+            <div>
+              <h2 class="wp-title" id="record-title" data-bind="record-title">
+                The record
+              </h2>
+              <p class="wp-context" data-bind="record-context"></p>
+            </div>
+          </header>
+          <div class="wp-record__grid">
+            <section class="wp-panel" aria-labelledby="history-title">
+              <h3 class="wp-panel__title" id="history-title">History</h3>
+              <ol class="wp-events" data-bind="history"></ol>
+            </section>
+            <section class="wp-panel" aria-labelledby="messages-title">
+              <h3 class="wp-panel__title" id="messages-title">
+                Messages to the patient
+              </h3>
+              <ol class="wp-events" data-bind="messages"></ol>
+              <p class="wp-panel__foot">
+                Sent only because she agreed to messages on WhatsApp, and never
+                with clinical detail.
+              </p>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 · Sign in: the close is a real input -->
+      <section
+        id="sign-in"
+        class="wp-act wp-close"
+        data-sc-act="flow"
+        aria-labelledby="signin-heading"
+      >
+        <div class="wp-inner wp-close__inner">
+          <div class="wp-close__lead" data-sc-in data-sc-stagger="70">
+            <h2 class="wp-close__title" id="signin-heading">Sign in</h2>
+            <p class="wp-close__carry" data-bind="carry"></p>
+            <p class="wp-close__boundary">
+              Administrative decisions only. Clinical judgement stays with
+              clinicians.
+            </p>
+          </div>
+          <div class="wp-signin" id="sign-in-panel">
+            <noscript
+              ><p class="wp-noscript">Signing in needs JavaScript.</p></noscript
+            >
+          </div>
+          <footer class="wp-foot">
+            <p>
+              ACCESS · appointments and scheduling for medical practices. The
+              practice, patients and times on this page are sample data.
+            </p>
+          </footer>
+        </div>
+      </section>
+    </main>
+
+    <nav class="wp-tabs" aria-label="This page">
+      <a href="#today" data-spy="today"><span data-icon="today"></span>Today</a>
+      <a href="#channels" data-spy="channels"
+        ><span data-icon="list"></span>Requests</a
+      >
+      <a href="#whatsapp" data-spy="whatsapp"
+        ><span data-icon="message"></span>WhatsApp</a
+      >
+      <a href="#race" data-spy="race"
+        ><span data-icon="calendar"></span>Calendar</a
+      >
+      <a href="#record" data-spy="record"
+        ><span data-icon="shield"></span>Record</a
+      >
+    </nav>
+
+    <script src="/welcome/scrollcraft.js"></script>
+    <script type="module" src="/src/welcome/main.tsx"></script>
+  </body>
+</html>

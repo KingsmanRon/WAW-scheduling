@@ -41,7 +41,7 @@ jobs:
       - name: Unit tests (availability engine, scheduling rules, patients, integrations, notification selection, WhatsApp interpreter and intent classifier, referral document links, lifecycle, rules, policy, config, storage, scanner, logging, migrations, connector faults)
         run: npx vitest run --project unit --reporter=verbose --reporter=json --outputFile.json=unit-report.json
       - name: Assert unit suite ran without skips
-        run: node scripts/assert-test-report.mjs unit-report.json 146
+        run: node scripts/assert-test-report.mjs unit-report.json 151
       - name: PostgreSQL integration (migrations, RLS, scheduling core, concurrency, practice API, security (authorisation matrix, API surface, console secrets), patients, worker outbox/notifications/EMR webhooks, WhatsApp channel and access layer, referral register and documents, waitlist offers and their concurrency, dispatcher, ambiguity, poison, idempotency, outcomes, metrics, rules, artifacts, auth/tenancy, acceptance 1-29, E2E flows A-I)
         env:
           QUALIFICATION_REPORT: qualification-report.json
@@ -92,7 +92,7 @@ jobs:
       - name: Browser end-to-end (reception booking and visit lifecycle, walk-in registration, reschedule and cancel, two-desk double booking, roles, blocks and leave, WhatsApp to console and back, waitlist offer accepted on WhatsApp)
         run: npx playwright test
       - name: Assert browser suite ran without skips or flakes
-        run: node scripts/assert-test-report.mjs e2e-report.json 15
+        run: node scripts/assert-test-report.mjs e2e-report.json 22
       - name: Upload browser test evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -253,7 +253,7 @@ function RecordLink({ type, id }: { type: string; id: string }) {
 }
 
 function show(value: unknown): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "(empty)";
   const text = typeof value === "string" ? value : JSON.stringify(value);
   return text.length > 120 ? `${text.slice(0, 119)}…` : text;
 }

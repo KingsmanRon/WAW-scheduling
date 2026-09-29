@@ -31,7 +31,7 @@ export function duration(seconds: number | null | undefined): string {
   return `${(seconds / 86_400).toFixed(1)} d`;
 }
 export function when(value: string | null | undefined): string {
-  return value ? new Date(value).toLocaleString() : "—";
+  return value ? new Date(value).toLocaleString() : "Not recorded";
 }
 export function percent(value: number | null | undefined): string {
   return value === null || value === undefined
@@ -41,10 +41,19 @@ export function percent(value: number | null | undefined): string {
 export function stateClass(state: string): string {
   return `badge state-${state.toLowerCase().replace(/_/g, "-")}`;
 }
+/** Words that plain lower-casing would get wrong. */
+const PROPER: Record<string, string> = {
+  whatsapp: "WhatsApp",
+  sms: "SMS",
+  emr: "EMR",
+  id: "ID",
+  api: "API",
+};
 export function label(value: string): string {
   return value
     .toLowerCase()
     .replace(/_/g, " ")
+    .replace(/\b[a-z]+\b/g, (word) => PROPER[word] ?? word)
     .replace(/^\w/, (c) => c.toUpperCase());
 }
 

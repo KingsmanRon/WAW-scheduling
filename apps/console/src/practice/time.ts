@@ -67,6 +67,9 @@ export const fmt = {
     DateTime.fromISO(date).setLocale(LOCALE).toFormat("cccc d LLLL yyyy"),
   shortDate: (date: string) =>
     DateTime.fromISO(date).setLocale(LOCALE).toFormat("ccc d LLL"),
+  /** A calendar date on its own: "29 Sept 2026". */
+  date: (date: string) =>
+    DateTime.fromISO(date).setLocale(LOCALE).toFormat("d LLL yyyy"),
   when: (iso: string, tz: string) =>
     dt(iso, tz).toFormat("ccc d LLL yyyy, HH:mm"),
   /** "in 4 min", "3 h ago". */

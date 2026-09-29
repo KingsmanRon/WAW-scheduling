@@ -1,14 +1,16 @@
 import React from "react";
 
 /** ACCESS's own small line-icon set (20px grid, 1.6px stroke). */
-const PATHS = {
+export const PATHS = {
   queue: "M4 5.5h12M4 10h12M4 14.5h7M14.5 13v3.5M12.75 14.75h3.5",
   dashboard: "M3.5 15.5h13M5 12.5l3.5-4 3 2.5L15 6.5M13 6.5h2v2",
   plus: "M10 4.5v11M4.5 10h11",
   rules: "M5 4h7l3 3v9H5zM12 4v3h3M7.5 10.5h5M7.5 13.5h3",
   signOut: "M8.5 4.5H5v11h3.5M11.5 7l3 3-3 3M14.5 10H8",
+  signIn: "M11.5 4.5H15v11h-3.5M7.5 7l3 3-3 3M10.5 10H4",
   account: "M10 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM4.5 16a5.5 5.5 0 0 1 11 0",
   back: "M11.5 5.5 7 10l4.5 4.5",
+  forward: "M8.5 5.5 13 10l-4.5 4.5",
   chevron: "M6 8l4 4 4-4",
   alert: "M10 3.8 17 16H3zM10 8.5v3.2M10 13.9v.1",
   shield:
