@@ -72,17 +72,16 @@ rotate them only with a re-encryption / re-hashing plan (RUNBOOK.md).
 2. **Auth**: disable public sign-ups; create staff users (e-mail + password
    or magic link) and require MFA according to the practice's policy. Note
    the project URL, anon key and the JWT issuer/JWKS URL.
-3. **Migrations**: deploy the Railway `migrate` service (section 2) or run
-   `MIGRATION_DATABASE_URL=… npm run db:migrate` from an operator machine. The
+3. **Migrations**: deploy the Railway `migrate` service (section 2). The
    runner is ledger-based, idempotent and applies `supabase/migrations` in
    order; `0010` adds `scheduling.schedule_signals` to the
    `supabase_realtime` publication.
-4. **Runtime logins** (once):
-   `psql "$MIGRATION_DATABASE_URL" --set=api_password=… --set=worker_password=… -f supabase/provisioning/runtime-roles.sql`
+4. **Runtime logins** (once, from a checkout):
+   `railway run -s migrate -e production -- sh -c 'psql "$MIGRATION_DATABASE_URL" --set=api_password=… --set=worker_password=… -f supabase/provisioning/runtime-roles.sql'`
    The logins are `NOINHERIT NOBYPASSRLS`, own nothing and have only the
    privileges the migrations grant.
 5. **Storage** (once):
-   `psql "$MIGRATION_DATABASE_URL" -v bucket=access-artifacts -f supabase/provisioning/storage-bucket.sql`
+   `railway run -s migrate -e production -- sh -c 'psql "$MIGRATION_DATABASE_URL" -v bucket=access-artifacts -f supabase/provisioning/storage-bucket.sql'`
    The bucket is private with no browser policies; the API stores only
    AES-256-GCM ciphertext and serves documents itself through one-minute
    signed links.
@@ -169,9 +168,10 @@ stand-in; **activating a real number only needs Meta credentials**:
    | `waitlist_offer`            | Hi {{1}}, an appointment has become available at {{2}}: {{3}} with {{4}} at {{5}}. Tap Book it before {{6}} to take it. If we do not hear from you, it will be offered to someone else. | Book it, No thanks    |
 
 4. Set the token on the worker as e.g. `WHATSAPP_ROSEBANK_TOKEN` and route
-   the number to the practice (owner credential, once):
+   the number to the practice (owner credential, once; run from a checkout
+   after `npm ci && npm run build`):
    ```bash
-   MIGRATION_DATABASE_URL=… npm run channel:whatsapp:connect -- \
+   railway run -s migrate -e production -- npm run channel:whatsapp:connect -- \
      --tenant <org uuid> --practice <practice uuid> \
      --phone-number-id <Meta phone_number_id> --display-number +27… \
      --secret-ref WHATSAPP_ROSEBANK_TOKEN [--waba-id …] [--language en]
@@ -185,8 +185,12 @@ for the minimised message text it receives.
 
 ## 5. A new practice
 
+Operator commands run from a checkout (`npm ci && npm run build`) with the
+`migrate` service's variables, so the owner credential, `DATABASE_SSL` and
+the CA certificate come from Railway and are never copied:
+
 ```bash
-MIGRATION_DATABASE_URL=… npm run practice:bootstrap -- \
+railway run -s migrate -e production -- npm run practice:bootstrap -- \
   --tenant <org uuid> --tenant-name "Rosebank Health" \
   --name "Rosebank Family Practice" --timezone Africa/Johannesburg \
   --admin-user <Supabase Auth user uuid> --admin-name "Dr N. Admin" \
@@ -201,9 +205,15 @@ setup**. Further staff are granted practice roles through
 `DOCTOR`, `RECEPTIONIST`, `CLINICAL_STAFF` or `READ_ONLY`), a
 `staff.manage` permission held by practice administrators.
 
-For staging or a demonstration, `npm run practice:demo -- --tenant … --practice …`
-adds synthetic locations, practitioners, types, hours and patients (refused
-with REAL data).
+For staging or a demonstration, `practice:demo` adds synthetic locations,
+practitioners, types, hours and patients (refused with REAL data); it also
+needs the environment's `IDENTIFIER_HASH_KEY` (the worker's value:
+`railway variable list -s worker -e staging -k`):
+
+```bash
+railway run -s migrate -e staging -- env IDENTIFIER_HASH_KEY=<staging key> \
+  npm run practice:demo -- --tenant <org uuid> --practice <practice uuid>
+```
 
 ## 6. Deploying to staging
 
@@ -239,11 +249,10 @@ connected to the repository, "Wait for CI" on), the same order holds: the
 API and worker of a new commit stay not-ready until `migrate` has applied
 its migrations.
 
-Staging data is synthetic only: `npm run practice:bootstrap` and
-`npm run practice:demo` (section 5) with the staging owner URL
-(`railway run -s migrate -e staging -- npm run practice:demo -- …`), a
-WhatsApp test number connected with `channel:whatsapp:connect`, and the
-testers' phones in `NOTIFICATION_RECIPIENT_ALLOWLIST` on the worker.
+Staging data is synthetic only: `practice:bootstrap` and `practice:demo`
+(section 5, with `-e staging`), a WhatsApp test number connected with
+`channel:whatsapp:connect`, and the testers' phones in
+`NOTIFICATION_RECIPIENT_ALLOWLIST` on the worker.
 
 ## 7. Staging acceptance
 
@@ -284,7 +293,20 @@ migrations from a clean database, browser end to end).
 11. **Worker outage**: remove the worker's deployment, book an appointment,
     redeploy the worker: the confirmation is sent once, late.
 12. **Isolation**: the API without a token answers 401; a second practice's
-    ids answer 404.
+    ids answer 404. On the Supabase project itself (owner session), the
+    browser and service roles hold no table privileges beyond the Realtime
+    signal; this must return no rows:
+
+    ```sql
+    SELECT r.rolname, n.nspname || '.' || c.relname AS relation
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace CROSS JOIN pg_roles r
+     WHERE n.nspname IN ('public','platform','directory','scheduling','messaging','integration')
+       AND c.relkind IN ('r','p') AND r.rolname IN ('anon','authenticated','service_role')
+       AND has_table_privilege(r.oid, c.oid, 'SELECT,INSERT,UPDATE,DELETE')
+       AND NOT (r.rolname = 'authenticated' AND n.nspname || '.' || c.relname
+                IN ('directory.practice_memberships','scheduling.schedule_signals'));
+    ```
+
 13. **Rollback drill**: roll `api` back to the previous deployment (RUNBOOK.md),
     check `/ready`, roll forward again.
 

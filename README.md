@@ -30,6 +30,7 @@ database itself refuses a double booking.
 | [RUNBOOK.md](RUNBOOK.md)                                         | health, logs, alerts, incidents, retention, patient requests             |
 | [SECURITY.md](SECURITY.md)                                       | authentication, roles, isolation, data protection, POPIA                 |
 | [docs/client-pilot-checklist.md](docs/client-pilot-checklist.md) | gates before real patient data                                           |
+| [docs/implementation-report.md](docs/implementation-report.md)   | what was built, how it was verified, what remains outside the repository |
 | [docs/referral-operations](docs/referral-operations/)            | the organisation referral workspace                                      |
 
 ## Repository
