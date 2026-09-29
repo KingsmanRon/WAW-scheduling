@@ -1,14 +1,11 @@
 import React, { useState } from "react";
 import { label } from "../../format";
 import { PageHeader } from "../../layout/PageHeader";
+import { errorCode } from "../api";
 import { usePractice } from "../context";
 import { useLink, type ViewProps } from "../PracticeApp";
 import { fmt } from "../time";
-import type {
-  ConversationMessage,
-  ConversationSummary,
-  PatientSummary,
-} from "../types";
+import type { ConversationMessage, ConversationSummary } from "../types";
 import {
   Empty,
   ErrorNote,
@@ -41,7 +38,11 @@ const TABS = [
 export function Conversations({ route, go }: ViewProps) {
   const practice = usePractice();
   const link = useLink();
-  const [tab, setTab] = useState<(typeof TABS)[number][0]>("NEEDS_STAFF");
+  // The tab lives in the route, so opening a conversation keeps it.
+  const tab =
+    TABS.find(([value]) => value === route.query.get("status"))?.[0] ??
+    "NEEDS_STAFF";
+  const status = (value: string) => (value === "NEEDS_STAFF" ? null : value);
   const list = useLoad(
     () =>
       practice.client.get<{ items: ConversationSummary[] }>("/conversations", {
@@ -64,7 +65,9 @@ export function Conversations({ route, go }: ViewProps) {
             type="button"
             role="tab"
             aria-selected={tab === value}
-            onClick={() => setTab(value)}
+            onClick={() =>
+              go(link("conversations", selected, { status: status(value) }))
+            }
           >
             {text}
           </button>
@@ -87,7 +90,7 @@ export function Conversations({ route, go }: ViewProps) {
             {(list.data?.items ?? []).map((c) => (
               <li key={c.id}>
                 <a
-                  href={link("conversations", c.id)}
+                  href={link("conversations", c.id, { status: status(tab) })}
                   aria-current={c.id === selected ? "true" : undefined}
                 >
                   <span className="conv-list__who">
@@ -121,7 +124,9 @@ export function Conversations({ route, go }: ViewProps) {
           {selected ? (
             <Thread
               id={selected}
-              onResolved={() => go(link("conversations"))}
+              onResolved={() =>
+                go(link("conversations", null, { status: status(tab) }))
+              }
             />
           ) : (
             <Empty title="Choose a conversation" />
@@ -132,33 +137,77 @@ export function Conversations({ route, go }: ViewProps) {
   );
 }
 
+interface ThreadData {
+  conversation: ConversationSummary;
+  messages: ConversationMessage[];
+}
+/** Waiting for a reply to leave: checked this often, for at most this long. */
+const SEND_CHECK_MS = 500;
+const SEND_WAIT_MS = 6000;
+
 function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
   const practice = usePractice();
   const link = useLink();
-  const thread = useLoad(
-    () =>
-      practice.client.get<{
-        conversation: ConversationSummary;
-        messages: ConversationMessage[];
-      }>(`/conversations/${id}`),
-    [id, practice.tick],
-  );
+  const fetchThread = () =>
+    practice.client.get<ThreadData>(`/conversations/${id}`);
+  const thread = useLoad(fetchThread, [id, practice.tick]);
   const [reply, setReply] = useState("");
   const [linking, setLinking] = useState(false);
   const action = useAction();
   if (thread.error && !thread.data) return <ErrorNote error={thread.error} />;
   if (!thread.data) return <Loading what="the conversation" />;
   const { conversation: c, messages } = thread.data;
-  const resolve = (status: "ACTIVE" | "CLOSED", patient?: PatientSummary) =>
+  const update = (change: {
+    status?: "ACTIVE" | "CLOSED";
+    patient_id?: string;
+  }) =>
     void action.run(async () => {
-      await practice.client.send("PATCH", `/conversations/${c.id}`, {
-        status,
-        expected_version: c.version,
-        ...(patient ? { patient_id: patient.id } : {}),
-      });
-      practice.changed();
-      if (!patient) onResolved();
+      const patch = (version: number) =>
+        practice.client.send("PATCH", `/conversations/${c.id}`, {
+          ...change,
+          expected_version: version,
+        });
+      try {
+        try {
+          await patch(c.version);
+        } catch (e) {
+          // Linking only names the patient. If nobody has linked one since
+          // the thread loaded, whatever moved the version (a message sent or
+          // received) does not bear on it, so it goes onto the current one.
+          // Handing back or closing is refused instead, for staff to see
+          // what changed first.
+          if (change.status || errorCode(e) !== "VERSION_CONFLICT") throw e;
+          const current = (await fetchThread()).conversation;
+          if (current.patient) throw e;
+          await patch(current.version);
+        }
+      } finally {
+        // Also after a conflict: the next attempt then uses the current version.
+        await thread.reload();
+        practice.changed();
+      }
+      if (change.status) onResolved();
     });
+  /**
+   * The worker sends a reply in the background and then records it on the
+   * conversation, which moves its version. Until then, handing back,
+   * closing or linking would be refused as a conflicting change, so they
+   * wait for the send (or give up waiting after a few seconds).
+   */
+  const sent = async (messageId: string) => {
+    for (let waited = 0; waited < SEND_WAIT_MS; waited += SEND_CHECK_MS) {
+      await new Promise((r) => setTimeout(r, SEND_CHECK_MS));
+      let status: string | undefined;
+      try {
+        const { messages } = await fetchThread();
+        status = messages.find((m) => m.id === messageId)?.status;
+      } catch {
+        // The reply is already accepted; the reload that follows shows the rest.
+        return;
+      }
+      if (status !== "PENDING" && status !== "SENDING") return;
+    }
+  };
   return (
     <section className="panel thread">
       <header className="thread__head">
@@ -179,6 +228,7 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
             <button
               type="button"
               className="btn btn-secondary"
+              disabled={action.busy}
               onClick={() => setLinking(!linking)}
             >
               Link patient
@@ -189,7 +239,7 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
               type="button"
               className="btn btn-secondary"
               disabled={action.busy}
-              onClick={() => resolve("ACTIVE")}
+              onClick={() => update({ status: "ACTIVE" })}
             >
               Hand back to the assistant
             </button>
@@ -197,11 +247,11 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
           {c.status !== "CLOSED" && (
             <button
               type="button"
-              className="btn btn-quiet"
+              className="btn btn-secondary"
               disabled={action.busy}
-              onClick={() => resolve("CLOSED")}
+              onClick={() => update({ status: "CLOSED" })}
             >
-              Close
+              Close conversation
             </button>
           )}
         </div>
@@ -215,12 +265,13 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
       {linking && (
         <div className="thread__link">
           <p className="small muted">
-            Link the conversation to the patient you identified with them.
+            Link the conversation to the patient you identified with them. It
+            stays with reception until you hand it back or close it.
           </p>
           <PatientPicker
             onPick={(p) => {
               setLinking(false);
-              resolve(c.status === "CLOSED" ? "CLOSED" : "ACTIVE", p);
+              update({ patient_id: p.id });
             }}
           />
         </div>
@@ -257,12 +308,16 @@ function Thread({ id, onResolved }: { id: string; onResolved: () => void }) {
             e.preventDefault();
             if (!reply.trim()) return;
             void action.run(async () => {
-              await practice.client.send(
-                "POST",
-                `/conversations/${c.id}/messages`,
-                { body: reply.trim() },
-              );
+              const { message_id } = await practice.client.send<{
+                message_id: string;
+              }>("POST", `/conversations/${c.id}/messages`, {
+                body: reply.trim(),
+              });
               setReply("");
+              // Show it as pending straight away, then as sent.
+              await thread.reload();
+              await sent(message_id);
+              await thread.reload();
               practice.changed();
             });
           }}

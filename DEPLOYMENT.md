@@ -142,6 +142,13 @@ The build writes a Content-Security-Policy that allows connections only to
 `VITE_CORE_API_URL` and `VITE_SUPABASE_URL` (HTTPS and WSS); a new API or
 Supabase URL needs a rebuild.
 
+The same build serves the front page at `/welcome/`; the console sends
+signed-out visitors there and its sign-in hands back to the console, so it
+needs no configuration of its own. E-mail sign-in links still land on the
+console's address (the Supabase **Site URL**), which reads the session.
+`vercel.json` makes `/welcome/` revalidate on every visit, because the
+engine files there are not content-hashed.
+
 ## 4. WhatsApp (Meta Cloud API)
 
 Everything below is implemented and tested against a local Graph API
@@ -264,7 +271,9 @@ migrations from a clean database, browser end to end).
    the Railway deployment id for CLI deploys) and `/ready` on the API and
    the worker; `/metrics` answers only with `METRICS_TOKEN`; Prometheus
    shows both targets up.
-2. **Sign-in and roles**: sign in as a practice administrator,
+2. **Sign-in and roles**: open the console signed out: the front page
+   appears and its sample morning runs as you scroll. Sign in at its end
+   as a practice administrator,
    receptionist, doctor, clinical staff member and read-only user; each
    sees only their menus; read-only cannot book (the API answers 403).
 3. **Phone booking**: as reception, find a patient, choose type,

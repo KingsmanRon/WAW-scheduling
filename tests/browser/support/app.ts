@@ -26,18 +26,23 @@ export async function closeDb(): Promise<void> {
   pool = undefined;
 }
 
-/** The console's synthetic sign-in (development identity bridge). */
+/**
+ * The console's synthetic sign-in (development identity bridge), on the
+ * front page signed-out visitors are sent to.
+ */
 export async function signIn(
   page: Page,
   role: PracticeRole,
   user = role.toLowerCase().replace(/_/g, "-"),
 ): Promise<void> {
   await page.goto("/");
+  await page.waitForURL(/\/welcome\//);
   await page.getByLabel("Organisation (tenant) ID").fill(TENANT_ID);
   await page.getByLabel("Practice role").selectOption(role);
   await page.getByLabel("Staff name (synthetic)").fill(user);
   await page.getByRole("button", { name: "Enter console" }).click();
-  // One practice: straight to its day.
+  // Handed over to the console; one practice: straight to its day.
+  await page.waitForURL((url) => !url.pathname.startsWith("/welcome/"));
   await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
 }
 export function practicePath(

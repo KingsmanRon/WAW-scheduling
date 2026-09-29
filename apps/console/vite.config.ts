@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 
 /**
@@ -49,4 +50,13 @@ function contentSecurityPolicy(env: Record<string, string>): Plugin {
 
 export default defineConfig(({ mode }) => ({
   plugins: [contentSecurityPolicy(loadEnv(mode, process.cwd(), "VITE_"))],
+  build: {
+    rollupOptions: {
+      // The console, and the front page signed-out visitors land on.
+      input: {
+        console: fileURLToPath(new URL("index.html", import.meta.url)),
+        welcome: fileURLToPath(new URL("welcome/index.html", import.meta.url)),
+      },
+    },
+  },
 }));

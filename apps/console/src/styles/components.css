@@ -431,10 +431,14 @@ svg.glyph {
 }
 .panel__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--s-3);
   padding: var(--s-4) var(--s-5) 0;
+}
+.panel__head > select {
+  flex: 1 1 14rem;
 }
 .panel__body {
   padding: var(--s-4) var(--s-5) var(--s-5);

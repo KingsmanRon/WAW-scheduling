@@ -179,7 +179,7 @@ export async function registerChannelRoutes(
         status: 200,
         body: {
           conversation: await resolveConversation(c, staff(req, auth), id, {
-            status: body.status,
+            ...(body.status !== undefined ? { status: body.status } : {}),
             expectedVersion: body.expected_version,
             ...(body.patient_id !== undefined
               ? { patientId: body.patient_id }

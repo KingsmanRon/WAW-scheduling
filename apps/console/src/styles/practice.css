@@ -317,10 +317,13 @@ a.rail__brand {
 }
 
 /* Calendar ----------------------------------------------------------------- */
+/* The grid scrolls inside its own frame so the practitioner (or day) titles
+   and the hours stay in view however long the day is. */
 .calendar {
   --hours-w: 3.5rem;
   --col-min: 9.5rem;
-  overflow-x: auto;
+  overflow: auto;
+  max-height: max(26rem, calc(100svh - 15rem));
   border: 1px solid var(--c-line);
   border-radius: var(--r-3);
   background: var(--c-surface);
@@ -336,7 +339,18 @@ a.rail__brand {
   min-width: calc(var(--hours-w) + var(--cols) * var(--col-min));
 }
 .calendar__head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
   border-bottom: 1px solid var(--c-line);
+  background: var(--c-surface);
+}
+.calendar__head > :first-child,
+.calendar__hours {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  background: var(--c-surface);
 }
 .calendar__col-title {
   padding: var(--s-3);
@@ -355,9 +369,6 @@ a.rail__brand {
 .calendar.is-refreshing .calendar__body {
   opacity: 0.7;
   transition: opacity var(--d-2) var(--ease-out);
-}
-.calendar__hours {
-  position: relative;
 }
 .calendar__hours span {
   position: absolute;
@@ -496,8 +507,9 @@ a.rail__brand {
   background: var(--c-exception-bg);
   color: var(--c-exception-fg);
 }
-.calendar__hint {
-  margin-top: var(--s-2);
+.calendar__hint,
+.footnote {
+  margin-top: var(--s-3);
 }
 
 /* Booking ------------------------------------------------------------------ */
@@ -682,12 +694,12 @@ a.rail__brand {
 /* Forms and dialogs -------------------------------------------------------- */
 .form {
   display: grid;
-  gap: var(--s-4);
+  gap: var(--s-5);
 }
 .form-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
-  gap: var(--s-3) var(--s-4);
+  gap: var(--s-5) var(--s-4);
   align-items: end;
 }
 .form__actions {
@@ -920,6 +932,11 @@ a.rail__brand {
   .table:not(.table--compact) td {
     padding: 2px 0;
     border: 0;
+  }
+  /* A value that needs its column's name once the header is gone. */
+  .table:not(.table--compact) td[data-label]::before {
+    content: attr(data-label) " ";
+    color: var(--c-ink-3);
   }
   .table td .btn,
   .table td .button-row {

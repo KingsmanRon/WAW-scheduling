@@ -105,6 +105,8 @@ export function Shell({
   const me = session.me!;
   const signOut = () => {
     clearQueueCache();
+    // Signing out starts over: the next sign-in does not return to this page.
+    history.replaceState(null, "", location.pathname);
     void session.signOut();
   };
   const skip = (e: React.MouseEvent) => {

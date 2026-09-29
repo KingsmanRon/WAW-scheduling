@@ -13,7 +13,6 @@ import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/shell.css";
-import "./styles/login.css";
 import "./styles/queue.css";
 import "./styles/case.css";
 import "./styles/dashboard.css";
@@ -28,7 +27,6 @@ import {
   type PracticeRoute,
 } from "./practice/route";
 import { SessionProvider, useSession, type Me, type OrgRole } from "./session";
-import { Login } from "./views/Login";
 import { Practices } from "./views/Practices";
 
 // Each workspace is its own chunk: practice staff never download the
@@ -236,7 +234,18 @@ function App() {
   const go = (hash: string) => {
     location.hash = hash;
   };
-  if (!me) return <Login />;
+  // Signed out: the front page is where staff sign in (and where a new
+  // visitor learns what ACCESS is). It sends them back to this route.
+  const signedOut = session.ready && !me;
+  useEffect(() => {
+    if (!signedOut) return;
+    const next =
+      location.hash.startsWith("#/") && location.hash !== "#/"
+        ? `?next=${encodeURIComponent(location.hash)}`
+        : "";
+    location.replace(`/welcome/${next}#sign-in`);
+  }, [signedOut]);
+  if (!me) return loading;
   if (shown.page === "practice") {
     const member = me.practices.some(
       (p) => p.practice_id === shown.practice.practiceId,

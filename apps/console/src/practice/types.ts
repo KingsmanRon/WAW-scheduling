@@ -52,6 +52,16 @@ export const CHANNEL_LABELS: Record<Channel, string> = {
   OTHER: "Other",
 };
 
+/** What each patient message is, in the words staff use. */
+export const MESSAGE_LABELS: Record<string, string> = {
+  APPOINTMENT_CONFIRMATION: "Confirmation",
+  APPOINTMENT_RESCHEDULED: "Moved appointment",
+  APPOINTMENT_CANCELLED: "Cancellation",
+  APPOINTMENT_REMINDER_24H: "24-hour reminder",
+  APPOINTMENT_REMINDER_NEAR_TERM: "Near-term reminder",
+  WAITLIST_OFFER: "Waitlist offer",
+};
+
 export interface PracticeSettings {
   id: string;
   name: string;

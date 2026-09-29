@@ -12,3 +12,5 @@ playwright-report/
 e2e-report.json
 unit-report.json
 integration-report.json
+# scroll-craft verification runs (screenshots, contact sheets)
+docs/front-page/lab/

@@ -221,7 +221,7 @@ export function Calendar({ route, go }: ViewProps) {
             <button
               type="button"
               className="btn btn-secondary"
-              aria-label="Previous"
+              aria-label={mode === "day" ? "Previous day" : "Previous week"}
               onClick={() => set({ date: shiftDate(date, -step) })}
             >
               <Icon name="back" size={18} />
@@ -236,10 +236,10 @@ export function Calendar({ route, go }: ViewProps) {
             <button
               type="button"
               className="btn btn-secondary"
-              aria-label="Next"
+              aria-label={mode === "day" ? "Next day" : "Next week"}
               onClick={() => set({ date: shiftDate(date, step) })}
             >
-              <Icon name="arrowRight" size={18} />
+              <Icon name="forward" size={18} />
             </button>
             <label className="vh" htmlFor="cal-date">
               Date

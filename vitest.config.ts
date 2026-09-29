@@ -15,6 +15,10 @@ export default defineConfig({
       "@access/config": src("config"),
       "@access/observability": src("observability"),
       "@access/db": src("db"),
+      // The browser-safe domain the console's front page runs.
+      "@access/scheduling/domain": fileURLToPath(
+        new URL("./packages/scheduling/src/domain/index.ts", import.meta.url),
+      ),
       "@access/scheduling": src("scheduling"),
       "@access/patients": src("patients"),
       "@access/integrations": src("integrations"),

@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import React, { useState } from "react";
 import { Icon } from "../../components/Icon";
 import { label } from "../../format";
@@ -275,6 +276,23 @@ export function AddToWaitlistDialog({
   );
 }
 
+/**
+ * The first quarter hour a waitlist offer made now could still be answered
+ * by: the offer window plus the Scheduling Core's 30-minute margin.
+ */
+function firstOfferable(
+  tz: string,
+  offerMinutes: number,
+): { day: string; time: string } {
+  const earliest = DateTime.now()
+    .setZone(tz)
+    .plus({ minutes: offerMinutes + 30 });
+  const start = earliest
+    .startOf("hour")
+    .plus({ minutes: Math.ceil((earliest.minute + 1) / 15) * 15 });
+  return { day: start.toISODate()!, time: start.toFormat("HH:mm") };
+}
+
 function AnnounceSlotDialog({ onClose }: { onClose: () => void }) {
   const practice = usePractice();
   const tz = practice.tz;
@@ -285,8 +303,11 @@ function AnnounceSlotDialog({ onClose }: { onClose: () => void }) {
   const [locationId, setLocationId] = useState(
     practitioner?.location_ids[0] ?? "",
   );
-  const [day, setDay] = useState(todayIn(tz));
-  const [time, setTime] = useState("10:00");
+  const [first] = useState(() =>
+    firstOfferable(tz, practice.data.practice.waitlist_offer_ttl_minutes),
+  );
+  const [day, setDay] = useState(first.day);
+  const [time, setTime] = useState(first.time);
   const [sent, setSent] = useState(false);
   return (
     <Dialog title="Offer a free time to the waitlist" onClose={onClose}>

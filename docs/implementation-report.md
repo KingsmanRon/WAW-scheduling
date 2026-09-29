@@ -101,7 +101,8 @@ Versioned under `/v1`, strict schemas, domain error codes
 
 ## 5. UI implemented (practice console)
 
-Supabase sign-in (a synthetic bridge only in local and staging), practice
+Supabase sign-in (a synthetic bridge only in local and staging) at the end
+of the front page signed-out visitors land on (section 17), practice
 selection when a user belongs to several, and per role: **Today** (arrivals,
 waiting, no-shows, attention list), **Calendar** (day and week, by
 practitioner or location, block time), **Appointments** search,
@@ -190,17 +191,17 @@ and declined at once, two offers of one slot.
 
 ## 9. Tests
 
-| Suite                                            | Tests | What it covers                                                                                                                                                                                        |
-| ------------------------------------------------ | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit                                             |   146 | availability engine and time zones, rules, state machine, patients, notifications, WhatsApp interpreter and classifier, policy, configuration, migrations, links                                      |
-| Integration (real PostgreSQL, real logins)       |   129 | RLS and schema security, Scheduling Core, practice API, patients, worker, WhatsApp channel, referrals, documents, waitlist, schema gate, connection loss                                              |
-| Acceptance and qualification (vitest)            |    39 | the referral workspace's acceptance and qualification suites, including the runtime logins' least privilege                                                                                           |
-| Security                                         |    12 | the authorisation matrix (every route × every role, anonymous, other practice), API hardening, console bundle secrets                                                                                 |
-| Concurrency                                      |     9 | section 8                                                                                                                                                                                             |
-| Browser (Playwright, built console, API, worker) |    15 | reception booking and visit, walk-in, reschedule and cancel, two desks racing, five roles, blocks and leave with confirmations, WhatsApp to console and back, waitlist on WhatsApp; desktop and phone |
-| Migration validation                             |     2 | all migrations on a clean database standing in for Supabase and on plain PostgreSQL, twice, schema invariants                                                                                         |
+| Suite                                            | Tests | What it covers                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------ | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit                                             |   151 | availability engine and time zones, rules, state machine, patients, notifications, WhatsApp interpreter and classifier, policy, configuration, migrations, links, the front page's sample scheduling                                                                                                    |
+| Integration (real PostgreSQL, real logins)       |   129 | RLS and schema security, Scheduling Core, practice API, patients, worker, WhatsApp channel, referrals, documents, waitlist, schema gate, connection loss                                                                                                                                                |
+| Acceptance and qualification (vitest)            |    39 | the referral workspace's acceptance and qualification suites, including the runtime logins' least privilege                                                                                                                                                                                             |
+| Security                                         |    12 | the authorisation matrix (every route × every role, anonymous, other practice), API hardening, console bundle secrets                                                                                                                                                                                   |
+| Concurrency                                      |     9 | section 8                                                                                                                                                                                                                                                                                               |
+| Browser (Playwright, built console, API, worker) |    23 | reception booking and visit, walk-in, reschedule and cancel, two desks racing, five roles, blocks and leave with confirmations, WhatsApp to console and back, waitlist on WhatsApp, reception replying on WhatsApp then linking and closing, the front page and its sign-in hand-off; desktop and phone |
+| Migration validation                             |     2 | all migrations on a clean database standing in for Supabase and on plain PostgreSQL, twice, schema invariants                                                                                                                                                                                           |
 
-All pass locally (unit 146/146, PostgreSQL suites 189/189, browser 15/15)
+All pass locally (unit 151/151, PostgreSQL suites 189/189, browser 23/23)
 and in CI, which fails on any skipped test and runs lint, format, type
 checks, the builds, the image and the secret scan.
 
@@ -208,14 +209,14 @@ checks, the builds, the image and the secret scan.
 
 | #   | Check                                  | Result | Evidence                                                                                                                                                                                                                                                                                                     |
 | --- | -------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | Full test suite                        | pass   | 146 unit, 189 PostgreSQL (integration, e2e, security, concurrency), 15 browser; no skips                                                                                                                                                                                                                     |
+| 1   | Full test suite                        | pass   | 151 unit, 189 PostgreSQL (integration, e2e, security, concurrency), 23 browser; no skips                                                                                                                                                                                                                     |
 | 2   | Lint                                   | pass   | `npm run lint`; `npm run format` (Prettier)                                                                                                                                                                                                                                                                  |
 | 3   | Type checking                          | pass   | `npm run typecheck` (runtime and tests, strict)                                                                                                                                                                                                                                                              |
 | 4   | Production builds                      | pass   | `npm run build` (all workspaces, console via Vite); CI builds and checks the runtime image                                                                                                                                                                                                                   |
 | 5   | Migrations from a clean database       | pass   | `npm run db:validate`, with and without the Supabase stand-in: 16 applied, second run applies nothing, schema invariants hold                                                                                                                                                                                |
 | 6   | RLS                                    | pass   | `scheduling-rls` suite (7), authorisation matrix, cross-practice tests; schema check forbids unforced RLS and browser grants                                                                                                                                                                                 |
 | 7   | Concurrency                            | pass   | 9 concurrency tests (section 8)                                                                                                                                                                                                                                                                              |
-| 8   | End-to-end scheduling                  | pass   | 15 browser tests against the built console, API and worker (reception, WhatsApp, waitlist, roles, setup)                                                                                                                                                                                                     |
+| 8   | End-to-end scheduling                  | pass   | 23 browser tests against the built console, API and worker (reception, WhatsApp, waitlist, roles, setup)                                                                                                                                                                                                     |
 | 9   | No secrets in the repository           | pass   | `npm run check:secrets`; a pattern sweep finds only test fixtures; only `.env.example` is tracked; the console bundle test proves no server secret reaches it                                                                                                                                                |
 | 10  | TODO / mock / stub inspection          | pass   | no TODO, FIXME or stubs in production code. Two mocks remain, both refused with REAL data and in secure profiles: the synthetic malware scanner (ClamAV in production) and the referral workspace's destination connector (production uses `CONNECTOR_KIND=none`, manual entry). Neither touches scheduling. |
 | 11  | Vercel build configuration             | pass   | `apps/console/vercel.json` (monorepo install/build, headers), build-time CSP; checked by `npm run validate:infra`; the console build runs in CI                                                                                                                                                              |
@@ -357,3 +358,79 @@ wording):
 4. Smoke test without patient-facing actions; console security headers.
 5. Watch errors, slot conflicts, outbox age and notification failures for
    30 minutes; roll back (RUNBOOK.md) on any doubt.
+
+## 17. Second iteration: the front end
+
+Asked for: every console view working, and the front end built with the
+[scroll-craft](https://github.com/nateherkai/scroll-craft) skill as the
+reference.
+
+### Console audit
+
+Every view was opened at desktop (1440 x 900) and phone (390 x 844) sizes
+against the built console, API and worker, on a practice filled through
+the API: 46 view and size combinations, checked for console errors, failed
+requests, horizontal overflow and contrast. Then every form and action the
+browser suite does not cover was driven in a browser on a fresh database
+(18 flows: registering and editing a patient, contacts, identifiers and
+consent, referrals, the waitlist and its offers, schedule setup, practice
+settings, conversation replies and links, appointment notes, the audit
+filter). All 18 pass. Found and fixed:
+
+| Defect                                                                                                                                              | Fix                                                                                                                                                                                                                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linking a WhatsApp conversation to a patient also handed it back to the assistant                                                                   | `PATCH /conversations/:id` accepts `patient_id` alone; the conversation stays with reception; audited as `conversation.patient_linked`; an empty change is refused (400)                                                                        |
+| Handing back, closing or linking straight after a staff reply was refused as a conflicting change (the worker records the send on the conversation) | The console holds those actions until the reply has left (up to 6 s); a link still refused that way is applied once to the current version if nobody has linked a patient since. Handing back and closing stay refused, for staff to look first |
+| Opening a conversation from the "With the assistant" or "Closed" tab sent the list back to "Needs reception"                                        | The tab is part of the address, so opening, resolving and going back keep it                                                                                                                                                                    |
+| "Offer a free time" defaulted to 10:00, which was usually too soon to be answered and refused                                                       | It defaults to the first time an offer can still be answered                                                                                                                                                                                    |
+| Calendar: titles and hours scrolled out of view on a long day; next and previous used mismatched, unnamed icons                                     | Scroll area with fixed titles and hour column; matching icons named "Next day" / "Previous week"                                                                                                                                                |
+| Notifications showed message codes, no due or sent times, no way to the appointment                                                                 | Names staff use, a "Queued" column with the due time, sent times, "Open appointment"                                                                                                                                                            |
+| "Whatsapp", "Sms", "Emr" in labels                                                                                                                  | WhatsApp, SMS, EMR, ID and API keep their capitals                                                                                                                                                                                              |
+| Muted text under 4.5:1 on some surfaces                                                                                                             | Darkened to clear 4.5:1 wherever it is used                                                                                                                                                                                                     |
+| An empty cell in the referral form; phone tables with unnamed columns; the setup header overflowing on phones                                       | Form regrouped; phone tables name their columns; the header wraps                                                                                                                                                                               |
+| Em dashes as empty values                                                                                                                           | "Not recorded" and "(empty)"                                                                                                                                                                                                                    |
+
+### Front page
+
+Signed-out visitors to the console now land on `/welcome/` instead of a
+bare login form. It follows the scroll-craft procedure (brief, grammar,
+fingerprint gate, score, harness, feel check), recorded in
+[docs/front-page](front-page/builds/access/BRIEF.md), and uses its engine
+vendored unmodified (MIT; the licence sits beside it). The page looks and
+behaves like the console and runs the Scheduling Core's pure domain
+(`@access/scheduling/domain`) on a labelled, fictional sample practice:
+requests from every channel placed on the book, a WhatsApp patient
+choosing a time the visitor picks, then 25 simultaneous requests for that
+time with one held and 24 given the next free times. The one real figure
+is the repository's own concurrency test (25 bookings of one time against
+PostgreSQL, exactly one stored).
+
+It reads and writes no practice data; its only network use is the
+console's own sign-in (the synthetic bridge in local and staging,
+Supabase otherwise), after which it hands back to the console. A deep link
+survives the round trip as `next`, accepted only as a console route. The
+build-time CSP is unchanged (`script-src 'self'`, `style-src 'self'`).
+
+### Tests added
+
+5 unit tests (the page's placement, the race run for every free time of
+the day, confirmation, visit steps), 7 browser tests (the sign-in hand-off
+with a deep link, the computed morning, choosing a time by button and by
+keyboard, the skip link, reduced motion, the page's chrome on a desktop and
+a phone), a browser test in which reception replies on WhatsApp, links
+the patient at once, closes the conversation and opens it again from the
+"Closed" tab (it fails on the previous console, first with the conflict
+above, then with the tab), and the link-only change in the WhatsApp
+channel suite. The CI floors rose to 151 unit and 23 browser tests.
+
+### Verification (this commit)
+
+`npm run format`, `lint`, `typecheck`, `build`, `validate:infra` and
+`check:secrets` pass; `db:validate` passes with and without the Supabase
+stand-in; unit 151/151, PostgreSQL suites 189/189 and browser 23/23 in CI
+mode, with no skips or retries.
+
+Not verified: a real phone (iOS Safari, Chrome on Android; phone sizes ran
+in Chromium only), the Supabase sign-in in a browser (the suites use the
+synthetic identity; that form is the previous login's logic, moved), and a
+Vercel deployment of the two-page build.

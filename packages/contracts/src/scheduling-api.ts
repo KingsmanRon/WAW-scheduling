@@ -457,13 +457,21 @@ export const conversationListQuerySchema = z
 export const staffReplySchema = z
   .object({ body: z.string().trim().min(1).max(4096) })
   .strict();
+/**
+ * Staff hand a conversation back to the assistant or close it, and may link
+ * the patient they identified. Linking alone (no status) keeps the
+ * conversation with reception.
+ */
 export const resolveConversationSchema = z
   .object({
-    status: z.enum(["ACTIVE", "CLOSED"]),
+    status: z.enum(["ACTIVE", "CLOSED"]).optional(),
     patient_id: id.nullable().optional(),
     expected_version: version,
   })
-  .strict();
+  .strict()
+  .refine((b) => b.status !== undefined || b.patient_id !== undefined, {
+    message: "status or patient_id is required",
+  });
 
 // --- Referral register ----------------------------------------------------
 
