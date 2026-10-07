@@ -172,6 +172,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         if (AUTH_MODE === "synthetic" && !synthetic) return setMe(null);
+        // Nobody signed in: no need to ask the API (it would only answer 401).
+        if (AUTH_MODE === "supabase") {
+          const { data } = await supabaseClient().auth.getSession();
+          if (cancelled) return;
+          if (!data.session) return setMe(null);
+        }
         const res = await fetch(`${API_URL}/v1/me`, {
           headers: await session.headers(),
         }).catch(() => null);

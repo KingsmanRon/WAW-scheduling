@@ -389,6 +389,7 @@ filter). All 18 pass. Found and fixed:
 | Muted text under 4.5:1 on some surfaces                                                                                                             | Darkened to clear 4.5:1 wherever it is used                                                                                                                                                                                                     |
 | An empty cell in the referral form; phone tables with unnamed columns; the setup header overflowing on phones                                       | Form regrouped; phone tables name their columns; the header wraps                                                                                                                                                                               |
 | Em dashes as empty values                                                                                                                           | "Not recorded" and "(empty)"                                                                                                                                                                                                                    |
+| Signed out in Supabase mode, the console still asked the API who was signed in: every visit to the front page cost an API call and logged a 401     | It checks the Supabase session first, as the synthetic mode already did                                                                                                                                                                         |
 
 ### Front page
 
@@ -430,7 +431,18 @@ channel suite. The CI floors rose to 151 unit and 23 browser tests.
 stand-in; unit 151/151, PostgreSQL suites 189/189 and browser 23/23 in CI
 mode, with no skips or retries.
 
+The Supabase sign-in (what production uses; the suites use the synthetic
+identity) was then driven in a browser against a local stand-in for
+Supabase Auth issuing ES256 tokens, with the API in JWT mode verifying them
+through its JWKS: a signed-out deep link reaches the sign-in, a wrong
+password is refused in words, the right one returns to the deep link with
+the token on every API call, the session survives a reload and a second
+tab, signing out clears it, the e-mail link is requested without creating
+users, and the form works at phone size. It found one fault, fixed: signed
+out, the console still asked the API who was signed in, so every
+anonymous visit to the front page cost an API call and logged a 401.
+
 Not verified: a real phone (iOS Safari, Chrome on Android; phone sizes ran
-in Chromium only), the Supabase sign-in in a browser (the suites use the
-synthetic identity; that form is the previous login's logic, moved), and a
-Vercel deployment of the two-page build.
+in Chromium only), sign-in against a real Supabase project and its
+Realtime updates (the console falls back to refreshing every 20 seconds),
+and a Vercel deployment of the two-page build.

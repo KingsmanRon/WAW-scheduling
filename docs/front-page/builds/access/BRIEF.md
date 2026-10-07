@@ -162,9 +162,12 @@ the race), choosing a time by button and by keyboard focus in the rail
 (focus parks the act where the time is on screen), the skip link, reduced
 motion, and the chrome on a desktop and a phone.
 
-Not verified: a real phone (iOS Safari and Chrome on Android), and the
-Supabase sign-in path in a browser (the suites use the synthetic identity;
-the Supabase form is the console's previous, unchanged logic).
+The Supabase sign-in (the suites use the synthetic identity) was driven in
+a browser against a local stand-in for Supabase Auth and the API in JWT
+mode; see section 17 of the implementation report.
+
+Not verified: a real phone (iOS Safari and Chrome on Android), and sign-in
+against a real Supabase project.
 
 ## Feel check
 
