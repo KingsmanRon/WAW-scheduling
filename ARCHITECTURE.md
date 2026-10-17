@@ -7,6 +7,10 @@ paths goes through one **Scheduling Core** that owns availability, holds,
 bookings and the appointment lifecycle. No channel writes appointments any
 other way.
 
+Drawn versions: [docs/diagrams/architecture.html](docs/diagrams/architecture.html)
+(the whole system) and [docs/diagrams/supabase.html](docs/diagrams/supabase.html)
+(what lives in Supabase and who can reach it).
+
 ```text
  Browser (Vercel)          WhatsApp (Meta Cloud API)        EMR / clinic systems
  practice console          patient's phone                  (signed webhooks out)

@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>ACCESS Architecture</title>
+    <meta name="claude:viewport-fit-sides" content="cover" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+      }
+      /* Layout: one wide system map (people on top, hosts as tinted zones, data at the bottom), then the path of one booking. */
+      :root {
+        --bg: #f4f7f6;
+        --surface: #ffffff;
+        --fg: #14211f;
+        --muted: #4d625e;
+        --line: #5d726e;
+        --rule: #d5dfdc;
+        --accent: #0f6b5c;
+        --accent-soft: #dcefe9;
+        --vercel: #eceff3;
+        --vercel-edge: #8a96a6;
+        --railway: #efeaf6;
+        --railway-edge: #8b78b0;
+        --supabase: #e3f2ea;
+        --supabase-edge: #4f9a74;
+        --outside: #fbf3e6;
+        --outside-edge: #b88a45;
+        --font-body:
+          "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+          sans-serif;
+        --font-mono:
+          "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #0f1615;
+          --surface: #17211f;
+          --fg: #e3ece9;
+          --muted: #9db1ac;
+          --line: #8fa6a0;
+          --rule: #2a3936;
+          --accent: #5fc7ad;
+          --accent-soft: #163a33;
+          --vercel: #1b2129;
+          --vercel-edge: #7d8a9c;
+          --railway: #211b2c;
+          --railway-edge: #a593c9;
+          --supabase: #14271e;
+          --supabase-edge: #5fb489;
+          --outside: #2a2216;
+          --outside-edge: #c99c58;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #0f1615;
+        --surface: #17211f;
+        --fg: #e3ece9;
+        --muted: #9db1ac;
+        --line: #8fa6a0;
+        --rule: #2a3936;
+        --accent: #5fc7ad;
+        --accent-soft: #163a33;
+        --vercel: #1b2129;
+        --vercel-edge: #7d8a9c;
+        --railway: #211b2c;
+        --railway-edge: #a593c9;
+        --supabase: #14271e;
+        --supabase-edge: #5fb489;
+        --outside: #2a2216;
+        --outside-edge: #c99c58;
+        color-scheme: dark;
+      }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: 15px;
+        line-height: 1.55;
+      }
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding-left: max(16px, env(safe-area-inset-left, 0px));
+        padding-right: max(16px, env(safe-area-inset-right, 0px));
+        padding-block: 40px 56px;
+        display: grid;
+        gap: 36px;
+      }
+      header {
+        display: grid;
+        gap: 8px;
+        max-width: 68ch;
+      }
+      .eyebrow {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      h1 {
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.1;
+        margin: 0;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+      h2 {
+        font-size: 20px;
+        margin: 0;
+        font-weight: 600;
+        text-wrap: balance;
+      }
+      p {
+        margin: 0;
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      .map {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        padding: 16px;
+        display: grid;
+        gap: 14px;
+      }
+      .scroll {
+        overflow-x: auto;
+      }
+      .scroll svg {
+        display: block;
+        width: 100%;
+        min-width: 860px;
+        height: auto;
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 22px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .swatch {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        border: 1.5px solid;
+      }
+      .sw-vercel {
+        background: var(--vercel);
+        border-color: var(--vercel-edge);
+      }
+      .sw-railway {
+        background: var(--railway);
+        border-color: var(--railway-edge);
+      }
+      .sw-supabase {
+        background: var(--supabase);
+        border-color: var(--supabase-edge);
+      }
+      .sw-outside {
+        background: var(--outside);
+        border-color: var(--outside-edge);
+      }
+      .stroke {
+        width: 26px;
+        height: 0;
+        border-top: 2px solid var(--line);
+      }
+      .stroke.dash {
+        border-top-style: dashed;
+      }
+
+      /* SVG */
+      .zone {
+        stroke-width: 1.5;
+      }
+      .z-vercel {
+        fill: var(--vercel);
+        stroke: var(--vercel-edge);
+      }
+      .z-railway {
+        fill: var(--railway);
+        stroke: var(--railway-edge);
+      }
+      .z-supabase {
+        fill: var(--supabase);
+        stroke: var(--supabase-edge);
+      }
+      .box {
+        fill: var(--surface);
+        stroke: var(--rule);
+        stroke-width: 1.2;
+      }
+      .box.outside {
+        fill: var(--outside);
+        stroke: var(--outside-edge);
+      }
+      .box.core {
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+      .zlabel {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        fill: var(--muted);
+      }
+      .t {
+        font-size: 14px;
+        font-weight: 600;
+        fill: var(--fg);
+      }
+      .s {
+        font-size: 11.5px;
+        fill: var(--muted);
+      }
+      .m {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        fill: var(--muted);
+      }
+      .lbl {
+        font-size: 11px;
+        fill: var(--fg);
+        font-weight: 500;
+      }
+      .k {
+        font-size: 11.5px;
+        fill: var(--accent);
+        font-weight: 600;
+      }
+      .wire {
+        fill: none;
+        stroke: var(--line);
+        stroke-width: 1.6;
+      }
+      .wire.dash {
+        stroke-dasharray: 5 4;
+      }
+      .head {
+        fill: var(--line);
+      }
+
+      .grid2 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 28px;
+        align-items: start;
+      }
+      .panel {
+        display: grid;
+        gap: 14px;
+        min-width: 0;
+      }
+      ol.path {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: step;
+        display: grid;
+        gap: 12px;
+      }
+      ol.path li {
+        counter-increment: step;
+        display: grid;
+        grid-template-columns: 28px 1fr;
+        gap: 12px;
+        align-items: start;
+      }
+      ol.path li::before {
+        content: counter(step);
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 500;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      ol.path b {
+        font-weight: 600;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 9px 10px 9px 0;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: var(--font-mono);
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      td:first-child {
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .note {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      code {
+        font-family: var(--font-mono);
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="eyebrow">System map</div>
+        <h1>ACCESS architecture</h1>
+        <p class="lede">
+          One Scheduling Core decides every booking, whoever asks and however
+          they ask. Staff use the console in a browser, patients use WhatsApp,
+          and both reach the same API, which writes to one database that refuses
+          double bookings.
+        </p>
+      </header>
+
+      <section class="map" aria-label="System diagram">
+        <div class="scroll">
+          <svg
+            viewBox="0 0 1000 680"
+            role="img"
+            aria-labelledby="map-title map-desc"
+          >
+            <title id="map-title">ACCESS system diagram</title>
+            <desc id="map-desc">
+              Staff browsers load the console from Vercel and call the API on
+              Railway. Patients on WhatsApp reach the API through Meta's
+              webhook. The API and worker on Railway read and write PostgreSQL
+              on Supabase, which also provides sign-in, document storage and
+              live updates.
+            </desc>
+            <defs>
+              <marker
+                id="arrow"
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="7"
+                markerHeight="7"
+                orient="auto-start-reverse"
+              >
+                <path class="head" d="M0,0 L10,5 L0,10 z" />
+              </marker>
+            </defs>
+
+            <!-- People and outside services -->
+            <rect
+              class="box outside"
+              x="20"
+              y="20"
+              width="230"
+              height="70"
+              rx="8"
+            />
+            <text class="t" x="36" y="48">Practice staff</text>
+            <text class="s" x="36" y="68">reception, doctors, admins</text>
+
+            <rect
+              class="box outside"
+              x="300"
+              y="20"
+              width="185"
+              height="70"
+              rx="8"
+            />
+            <text class="t" x="316" y="48">Patients</text>
+            <text class="s" x="316" y="68">book on WhatsApp</text>
+
+            <rect
+              class="box outside"
+              x="525"
+              y="20"
+              width="235"
+              height="70"
+              rx="8"
+            />
+            <text class="t" x="541" y="48">Meta WhatsApp Cloud API</text>
+            <text class="s" x="541" y="68">delivers messages both ways</text>
+
+            <rect
+              class="box outside"
+              x="800"
+              y="20"
+              width="180"
+              height="70"
+              rx="8"
+            />
+            <text class="t" x="816" y="48">Other providers</text>
+            <text class="s" x="816" y="68">e-mail · EMR webhooks</text>
+
+            <!-- Vercel -->
+            <rect
+              class="zone z-vercel"
+              x="20"
+              y="125"
+              width="230"
+              height="230"
+              rx="10"
+            />
+            <text class="zlabel" x="36" y="148">Vercel</text>
+            <rect class="box" x="36" y="162" width="198" height="72" rx="7" />
+            <text class="t" x="50" y="186">Front page</text>
+            <text class="m" x="50" y="204">/welcome/</text>
+            <text class="s" x="50" y="222">sample morning · sign-in</text>
+            <rect class="box" x="36" y="248" width="198" height="90" rx="7" />
+            <text class="t" x="50" y="272">Practice console</text>
+            <text class="s" x="50" y="292">today, calendar, booking,</text>
+            <text class="s" x="50" y="308">patients, waitlist, referrals,</text>
+            <text class="s" x="50" y="324">conversations, setup, audit</text>
+
+            <!-- Railway -->
+            <rect
+              class="zone z-railway"
+              x="290"
+              y="125"
+              width="690"
+              height="230"
+              rx="10"
+            />
+            <text class="zlabel" x="306" y="148">Railway</text>
+
+            <rect
+              class="box core"
+              x="306"
+              y="162"
+              width="262"
+              height="92"
+              rx="7"
+            />
+            <text class="t" x="320" y="186">API</text>
+            <text class="s" x="320" y="206">
+              checks sign-in and practice role,
+            </text>
+            <text class="s" x="320" y="222">validates, then runs one</text>
+            <text class="k" x="320" y="241">Scheduling Core command</text>
+
+            <rect class="box" x="482" y="272" width="86" height="64" rx="7" />
+            <text class="t" x="494" y="298">ClamAV</text>
+            <text class="s" x="494" y="316">virus scan</text>
+
+            <rect class="box" x="600" y="162" width="240" height="174" rx="7" />
+            <text class="t" x="614" y="186">Worker</text>
+            <text class="s" x="614" y="206">reads the outbox and then:</text>
+            <text class="s" x="614" y="226">· WhatsApp assistant replies</text>
+            <text class="s" x="614" y="244">· confirmations and reminders</text>
+            <text class="s" x="614" y="262">· waitlist offers</text>
+            <text class="s" x="614" y="280">· EMR webhooks, e-mail</text>
+            <text class="s" x="614" y="298">· expires holds, retention</text>
+            <text class="s" x="614" y="316">· health and metrics</text>
+
+            <rect class="box" x="862" y="162" width="102" height="92" rx="7" />
+            <text class="t" x="876" y="186">Migrate</text>
+            <text class="s" x="876" y="206">runs once</text>
+            <text class="s" x="876" y="222">per release,</text>
+            <text class="s" x="876" y="238">then stops</text>
+
+            <!-- Supabase -->
+            <rect
+              class="zone z-supabase"
+              x="20"
+              y="430"
+              width="960"
+              height="230"
+              rx="10"
+            />
+            <text class="zlabel" x="36" y="453">Supabase</text>
+
+            <rect class="box" x="36" y="468" width="98" height="64" rx="7" />
+            <text class="t" x="48" y="494">Auth</text>
+            <text class="s" x="48" y="512">staff sign-in</text>
+
+            <rect class="box" x="146" y="468" width="96" height="64" rx="7" />
+            <text class="t" x="158" y="494">Realtime</text>
+            <text class="s" x="158" y="512">live updates</text>
+
+            <rect class="box" x="290" y="468" width="138" height="64" rx="7" />
+            <text class="t" x="304" y="494">Storage</text>
+            <text class="s" x="304" y="512">private, encrypted</text>
+
+            <rect
+              class="box core"
+              x="450"
+              y="468"
+              width="514"
+              height="176"
+              rx="7"
+            />
+            <text class="t" x="466" y="494">PostgreSQL</text>
+            <text class="m" x="466" y="516">
+              scheduling · directory · messaging · integration · platform
+            </text>
+            <text class="s" x="466" y="542">
+              · exclusion constraint: two bookings can never overlap
+            </text>
+            <text class="s" x="466" y="562">
+              · row-level security: each login sees only its practice's rows
+            </text>
+            <text class="s" x="466" y="582">
+              · append-only audit of every change
+            </text>
+            <text class="s" x="466" y="602">
+              · transactional outbox: the change and its follow-up
+            </text>
+            <text class="s" x="476" y="618">
+              messages are saved together, or not at all
+            </text>
+
+            <text class="s" x="36" y="572">
+              The browser never writes to the
+            </text>
+            <text class="s" x="36" y="590">
+              database: Supabase's data API is off
+            </text>
+            <text class="s" x="36" y="608">
+              and browser roles hold no grants.
+            </text>
+
+            <!-- Wires -->
+            <!-- staff -> console -->
+            <path class="wire" d="M135,90 V160" marker-end="url(#arrow)" />
+            <!-- console -> API -->
+            <path
+              class="wire"
+              d="M234,292 H282 V230 H304"
+              marker-end="url(#arrow)"
+            />
+            <!-- patient <-> Meta -->
+            <path
+              class="wire"
+              d="M487,55 H523"
+              marker-start="url(#arrow)"
+              marker-end="url(#arrow)"
+            />
+            <!-- Meta -> API webhook -->
+            <path class="wire" d="M548,90 V160" marker-end="url(#arrow)" />
+            <text class="lbl" x="440" y="114">signed webhook</text>
+            <!-- worker -> Meta -->
+            <path class="wire dash" d="M700,160 V92" marker-end="url(#arrow)" />
+            <text class="lbl" x="708" y="114">sends</text>
+            <!-- worker -> providers -->
+            <path class="wire dash" d="M820,160 V92" marker-end="url(#arrow)" />
+            <text class="lbl" x="828" y="114">sends</text>
+            <!-- API -> ClamAV -->
+            <path class="wire" d="M526,254 V270" marker-end="url(#arrow)" />
+            <!-- front page / console -> Auth -->
+            <path class="wire" d="M85,355 V466" marker-end="url(#arrow)" />
+            <text class="lbl" x="91" y="392">sign-in</text>
+            <!-- Realtime -> console -->
+            <path
+              class="wire dash"
+              d="M194,466 V357"
+              marker-end="url(#arrow)"
+            />
+            <text class="lbl" x="200" y="410">push</text>
+            <!-- API -> Storage -->
+            <path class="wire" d="M340,254 V466" marker-end="url(#arrow)" />
+            <text class="lbl" x="346" y="392">documents</text>
+            <!-- API -> Postgres -->
+            <path class="wire" d="M468,254 V466" marker-end="url(#arrow)" />
+            <text class="lbl" x="474" y="392">request login</text>
+            <!-- Worker -> Postgres -->
+            <path class="wire" d="M720,336 V466" marker-end="url(#arrow)" />
+            <text class="lbl" x="726" y="392">worker login</text>
+            <!-- Migrate -> Postgres -->
+            <path class="wire" d="M913,254 V466" marker-end="url(#arrow)" />
+            <text class="lbl" x="919" y="392">owner</text>
+
+            <text class="lbl" x="240" y="286">HTTPS</text>
+          </svg>
+        </div>
+        <div class="legend">
+          <span><i class="swatch sw-vercel"></i>Vercel: the website</span>
+          <span><i class="swatch sw-railway"></i>Railway: the servers</span>
+          <span
+            ><i class="swatch sw-supabase"></i>Supabase: data and sign-in</span
+          >
+          <span
+            ><i class="swatch sw-outside"></i>People and outside services</span
+          >
+          <span><i class="stroke"></i>request</span>
+          <span><i class="stroke dash"></i>sent in the background</span>
+          <span
+            ><i
+              class="swatch"
+              style="border-color: var(--accent); background: var(--surface)"
+            ></i
+            >where the booking rules hold</span
+          >
+        </div>
+      </section>
+
+      <div class="grid2">
+        <section class="panel" aria-labelledby="path-title">
+          <h2 id="path-title">How one booking travels</h2>
+          <ol class="path">
+            <li>
+              <span
+                ><b>A request arrives.</b> Reception books on the console, or a
+                patient taps a time on WhatsApp and Meta passes it to the API as
+                a signed webhook.</span
+              >
+            </li>
+            <li>
+              <span
+                ><b>The API checks who is asking.</b> The staff member's
+                Supabase sign-in and practice role, or the patient's WhatsApp
+                number and conversation.</span
+              >
+            </li>
+            <li>
+              <span
+                ><b>The Scheduling Core decides.</b> It works out free times
+                from working hours, leave and existing bookings, holds the time
+                for five minutes, then books it.</span
+              >
+            </li>
+            <li>
+              <span
+                ><b>One database transaction saves it all.</b> The appointment,
+                its audit entry and its outbox event. If another request took
+                the time a moment earlier, the database refuses this one and the
+                person is offered other times.</span
+              >
+            </li>
+            <li>
+              <span
+                ><b>Everyone sees it.</b> A Realtime signal tells every open
+                console to refresh. Without Realtime, consoles refresh every 20
+                seconds.</span
+              >
+            </li>
+            <li>
+              <span
+                ><b>The worker follows up.</b> It reads the outbox and sends the
+                WhatsApp confirmation and reminders (only to patients who
+                consented), e-mails, and EMR webhooks, retrying on
+                failure.</span
+              >
+            </li>
+          </ol>
+        </section>
+
+        <section class="panel" aria-labelledby="where-title">
+          <h2 id="where-title">What runs where</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Host</th>
+                <th>Runs</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Vercel</td>
+                <td>
+                  Front page and console: a static site built from
+                  <code>apps/console</code>. Holds only public settings.
+                </td>
+              </tr>
+              <tr>
+                <td>Railway</td>
+                <td>
+                  <code>api</code>, <code>worker</code>,
+                  <code>migrate</code> and <code>clamav</code>, all from the
+                  repository's one Docker image. Holds every secret.
+                </td>
+              </tr>
+              <tr>
+                <td>Supabase</td>
+                <td>
+                  PostgreSQL with all practice data, Auth for staff sign-in,
+                  Storage for referral documents, Realtime for live updates.
+                </td>
+              </tr>
+              <tr>
+                <td>Meta</td>
+                <td>
+                  The practice's WhatsApp number and its six approved message
+                  templates.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="note">
+            Each database login can do only its own job. The API and worker use
+            separate logins limited by row-level security; only the migrate job
+            holds the owner login. Staging and production are fully separate
+            copies of all three hosts.
+          </p>
+        </section>
+      </div>
+    </div>
+  </body>
+</html>
