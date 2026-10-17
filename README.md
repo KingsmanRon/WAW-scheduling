@@ -39,6 +39,7 @@ database itself refuses a double booking.
 | [docs/implementation-report.md](docs/implementation-report.md)   | what was built, how it was verified, what remains outside the repository |
 | [docs/referral-operations](docs/referral-operations/)            | the organisation referral workspace                                      |
 | [docs/front-page](docs/front-page/builds/access/BRIEF.md)        | the front page: brief, score and how it was verified                     |
+| [docs/diagrams](docs/diagrams/)                                  | system and Supabase diagrams (open the HTML files in a browser)          |
 
 ## Repository
 
